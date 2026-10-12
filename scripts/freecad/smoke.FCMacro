@@ -1,0 +1,114 @@
+import json
+import math
+import os
+from pathlib import Path
+import time
+import traceback
+
+import FreeCAD as App
+import Part
+import Sketcher
+
+
+OUTPUT = Path(os.environ["CAD_AGENT_RUN_DIR"])
+TOLERANCE = 1e-7
+
+
+def inspect(sketch, width):
+    solver_status = sketch.solve()
+    sketch.Document.recompute()
+    geometry = sketch.Geometry
+    actual = {
+        "width": geometry[0].length(),
+        "height": geometry[1].length(),
+        "left_center_x": geometry[4].Center.x,
+        "left_center_y": geometry[4].Center.y,
+        "right_center_x": geometry[5].Center.x,
+        "right_center_y": geometry[5].Center.y,
+        "left_radius": geometry[4].Radius,
+        "right_radius": geometry[5].Radius,
+    }
+    expected = {"width": width, "height": 60.0, "left_center_x": 10.0,
+                "left_center_y": 30.0, "right_center_x": width - 10.0,
+                "right_center_y": 30.0, "left_radius": 5.0, "right_radius": 5.0}
+    checks = {name: math.isclose(value, expected[name], rel_tol=0, abs_tol=TOLERANCE)
+              for name, value in actual.items()}
+    result = {"units": "mm", "measurements": actual, "checks": checks,
+              "solver_status": solver_status, "fully_constrained": sketch.FullyConstrained,
+              "geometry_count": sketch.GeometryCount, "constraint_count": sketch.ConstraintCount,
+              "shape_valid": sketch.Shape.isValid()}
+    if solver_status != 0 or not all(checks.values()) or not result["fully_constrained"] or not result["shape_valid"]:
+        raise RuntimeError("Geometry or solver validation failed: " + json.dumps(result))
+    return result
+
+
+def build():
+    mode = os.environ.get("CAD_AGENT_TEST_MODE", "normal")
+    if mode == "script-error":
+        raise RuntimeError("Intentional script-error fixture.")
+    if mode == "timeout":
+        while True:
+            time.sleep(1)
+    document = App.newDocument("SyntheticDrawing")
+    sketch = document.addObject("Sketcher::SketchObject", "Drawing")
+    points = [App.Vector(0, 0, 0), App.Vector(100, 0, 0),
+              App.Vector(100, 60, 0), App.Vector(0, 60, 0)]
+    for index in range(4):
+        sketch.addGeometry(Part.LineSegment(points[index], points[(index + 1) % 4]), False)
+    for center_x in (10, 90):
+        sketch.addGeometry(Part.Circle(App.Vector(center_x, 30, 0), App.Vector(0, 0, 1), 5), False)
+    constraints = []
+    for index in range(4):
+        constraints.append(Sketcher.Constraint("Coincident", index, 2, (index + 1) % 4, 1))
+    constraints.extend([
+        Sketcher.Constraint("Horizontal", 0), Sketcher.Constraint("Vertical", 1),
+        Sketcher.Constraint("Horizontal", 2), Sketcher.Constraint("Vertical", 3),
+        Sketcher.Constraint("Coincident", 0, 1, -1, 1),
+        Sketcher.Constraint("Distance", 0, 100.0),
+        Sketcher.Constraint("Distance", 1, 60.0),
+        Sketcher.Constraint("DistanceX", 4, 3, 10.0),
+        Sketcher.Constraint("DistanceY", 4, 3, 30.0),
+        Sketcher.Constraint("DistanceX", 5, 3, 1, 1, 10.0),
+        Sketcher.Constraint("Horizontal", 4, 3, 5, 3),
+        Sketcher.Constraint("Radius", 4, 5.0),
+        Sketcher.Constraint("Equal", 4, 5),
+    ])
+    sketch.addConstraint(constraints)
+    sketch.renameConstraint(9, "Width")
+    sketch.renameConstraint(10, "Height")
+    if mode == "solver-error":
+        sketch.addConstraint(Sketcher.Constraint("Distance", 0, 110.0))
+    document.recompute()
+    snapshots = []
+    for revision, width in (("initial", 100.0), ("revised", 120.0)):
+        sketch.setDatum(9, App.Units.Quantity(str(width) + " mm"))
+        result = inspect(sketch, width)
+        result["revision"] = revision
+        document.saveAs(str(OUTPUT / (revision + ".FCStd")))
+        if App.GuiUp:
+            import FreeCADGui as Gui
+            Gui.activeDocument().activeView().viewTop()
+            Gui.activeDocument().activeView().fitAll()
+            Gui.updateGui()
+            Gui.activeDocument().activeView().saveImage(str(OUTPUT / (revision + ".png")), 1200, 800, "White")
+            result["preview"] = revision + ".png"
+        snapshots.append(result)
+    App.closeDocument(document.Name)
+    for result, width in zip(snapshots, (100.0, 120.0)):
+        reopened = App.openDocument(str(OUTPUT / (result["revision"] + ".FCStd")))
+        result["reopened"] = inspect(reopened.getObject("Drawing"), width)
+        App.closeDocument(reopened.Name)
+    return {"status": "passed", "freecad_version": App.Version(),
+            "tolerance_mm": TOLERANCE, "rendering": "gui" if App.GuiUp else "not_tested",
+            "snapshots": snapshots}
+
+
+try:
+    report = build()
+except Exception as error:
+    report = {"status": "failed", "error_type": type(error).__name__,
+              "error": str(error), "traceback": traceback.format_exc()}
+(OUTPUT / "geometry.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+if App.GuiUp:
+    from PySide import QtCore, QtWidgets
+    QtCore.QTimer.singleShot(0, QtWidgets.QApplication.quit)

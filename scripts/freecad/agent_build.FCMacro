@@ -1,0 +1,96 @@
+import json
+import math
+import os
+from pathlib import Path
+import traceback
+
+import FreeCAD as App
+import FreeCADGui as Gui
+import Part
+import Sketcher
+
+
+OUTPUT = Path(os.environ["CAD_AGENT_OUTPUT"])
+MODEL = json.loads(Path(os.environ["CAD_AGENT_MODEL"]).read_text(encoding="utf-8"))
+PREEXISTING = set(App.listDocuments())
+
+
+def inspect(document):
+    checks = []
+    for entity in MODEL["entities"]:
+        sketch = document.getObject(entity["component"])
+        geometry = sketch.Geometry[entity["geometry_index"]]
+        if sketch.solve() != 0:
+            raise RuntimeError("Sketch solver conflict: " + sketch.Name)
+        shape = geometry.toShape()
+        if not shape.isValid():
+            raise RuntimeError("Invalid native geometry.")
+        if entity["type"] == "line":
+            if geometry.StartPoint.distanceToPoint(App.Vector(*entity["start"], 0)) > 1e-6 or geometry.EndPoint.distanceToPoint(App.Vector(*entity["end"], 0)) > 1e-6:
+                raise RuntimeError("Line coordinates differ after solving/reopening.")
+        elif entity["type"] == "circle":
+            if abs(geometry.Radius - entity["radius"]) > 1e-6 or geometry.Center.distanceToPoint(App.Vector(*entity["center"], 0)) > 1e-6:
+                raise RuntimeError("Circle dimensions differ.")
+        else:
+            for point in entity["fit_points"]:
+                if shape.distToShape(Part.Vertex(App.Vector(*point, 0)))[0] > 1e-5:
+                    raise RuntimeError("Spline fit point not represented by native curve.")
+        checks.append({"id": entity["id"], "type": entity["type"], "length": shape.Length, "valid": True})
+    return checks
+
+
+try:
+    document = App.newDocument("AgentDraft")
+    indices = {}
+    for entity in MODEL["entities"]:
+        name = entity["component"]
+        sketch = document.getObject(name)
+        if sketch is None:
+            sketch = document.addObject("Sketcher::SketchObject", name)
+            sketch.Label = MODEL["component_meanings"][name]
+            sketch.ViewObject.LineColor = (0.0, 0.0, 0.0)
+            sketch.ViewObject.PointSize = 1
+            sketch.ViewObject.LineWidth = 2
+            indices[name] = 0
+        if entity["type"] == "line":
+            geometry = Part.LineSegment(App.Vector(*entity["start"], 0), App.Vector(*entity["end"], 0))
+        elif entity["type"] == "circle":
+            geometry = Part.Circle(App.Vector(*entity["center"], 0), App.Vector(0, 0, 1), entity["radius"])
+        else:
+            geometry = Part.BSplineCurve()
+            geometry.interpolate([App.Vector(*point, 0) for point in entity["fit_points"]])
+        index = sketch.addGeometry(geometry, False)
+        if index != entity["geometry_index"]:
+            raise RuntimeError("Geometry index differs from compiled component model.")
+        if entity["type"] == "line":
+            if abs(entity["start"][1] - entity["end"][1]) < 1e-9:
+                sketch.addConstraint(Sketcher.Constraint("Horizontal", index))
+            elif abs(entity["start"][0] - entity["end"][0]) < 1e-9:
+                sketch.addConstraint(Sketcher.Constraint("Vertical", index))
+        elif entity["type"] == "circle":
+            sketch.addConstraint(Sketcher.Constraint("Radius", index, entity["radius"]))
+    document.recompute()
+    inspect(document)
+    document.saveAs(str(OUTPUT / "draft.FCStd"))
+    App.closeDocument(document.Name)
+    reopened = App.openDocument(str(OUTPUT / "draft.FCStd"))
+    reopened.recompute()
+    checks = inspect(reopened)
+    Gui.activeDocument().activeView().viewTop()
+    Gui.activeDocument().activeView().fitAll()
+    Gui.updateGui()
+    Gui.activeDocument().activeView().saveImage(str(OUTPUT / "preview.png"), 1400, 900, "White")
+    report = {"status": "passed", "reopened": True, "entities": checks, "components": len(reopened.Objects),
+              "constraints": sum(obj.ConstraintCount for obj in reopened.Objects),
+              "fully_constrained_components": sum(obj.FullyConstrained for obj in reopened.Objects),
+              "policy": "Component sketches with native H/V and radius constraints; free DOFs retained, not falsely fixed.",
+              "review_status": "needs_review"}
+except Exception as error:
+    report = {"status": "failed", "error": str(error), "traceback": traceback.format_exc()}
+finally:
+    for name in set(App.listDocuments()) - PREEXISTING:
+        App.closeDocument(name)
+(OUTPUT / "geometry.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+if os.environ.get("CAD_AGENT_DIRECT") == "1":
+    from PySide import QtCore, QtWidgets
+    QtCore.QTimer.singleShot(0, QtWidgets.QApplication.quit)

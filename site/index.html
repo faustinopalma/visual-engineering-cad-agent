@@ -1,0 +1,71 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Open-source experiments in visual engineering to editable CAD, with deterministic execution and explicit review gates.">
+<title>Overview | Visual Engineering CAD Agent</title>
+<script>(()=>{const param=new URLSearchParams(window.location.search).get("scoutTheme");const theme=param||(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",theme);})();</script>
+<style>
+:root {
+  color-scheme: light;
+  --cp-bg: #f7f4ef;
+  --cp-bg-elevated: #fcfbf8;
+  --cp-surface: #ffffff;
+  --cp-surface-soft: #f5f5f5;
+  --cp-border: #dedede;
+  --cp-border-strong: #919191;
+  --cp-text: #242424;
+  --cp-text-muted: #5c5c5c;
+  --cp-text-soft: #6f6f6f;
+  --cp-accent: #b11f4b;
+  --cp-accent-hover: #9a1a41;
+  --cp-accent-soft: rgba(177, 31, 75, 0.08);
+  --cp-accent-fg: #ffffff;
+  --cp-success: #16a34a;
+  --cp-danger: #dc2626;
+  --cp-warning: #f59e0b;
+  --cp-link: #0078d4;
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+  --cp-overlay: rgba(255, 255, 255, 0.8);
+  --cp-panel: rgba(255, 255, 255, 0.86);
+  --cp-panel-strong: rgba(255, 255, 255, 0.96);
+  --cp-sheen: rgba(255, 255, 255, 0.55);
+  --cp-highlight: rgba(177, 31, 75, 0.12);
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --cp-bg: #3d3b3a;
+  --cp-bg-elevated: #343231;
+  --cp-surface: #292929;
+  --cp-surface-soft: #2e2e2e;
+  --cp-border: #474747;
+  --cp-border-strong: #5f5f5f;
+  --cp-text: #dedede;
+  --cp-text-muted: #919191;
+  --cp-text-soft: #b0b0b0;
+  --cp-accent: #fd8ea1;
+  --cp-accent-hover: #fb7b91;
+  --cp-accent-soft: rgba(253, 142, 161, 0.14);
+  --cp-accent-fg: #1a1a1a;
+  --cp-success: #4ade80;
+  --cp-danger: #f87171;
+  --cp-warning: #fbbf24;
+  --cp-link: #4da6ff;
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+  --cp-overlay: rgba(41, 41, 41, 0.88);
+  --cp-panel: rgba(41, 41, 41, 0.72);
+  --cp-panel-strong: rgba(41, 41, 41, 0.96);
+  --cp-sheen: rgba(255, 255, 255, 0.04);
+  --cp-highlight: rgba(253, 142, 161, 0.12);
+}
+*{box-sizing:border-box}body{margin:0;background:var(--cp-surface);color:var(--cp-text);font-family:"Segoe UI",Aptos,Calibri,-apple-system,BlinkMacSystemFont,sans-serif;line-height:1.65;letter-spacing:0}
+a{color:var(--cp-link);text-underline-offset:4px}a:hover{color:var(--cp-accent)}a:focus-visible,select:focus-visible{outline:3px solid var(--cp-accent);outline-offset:4px}
+.skip{position:absolute;left:12px;top:-80px;background:var(--cp-surface);padding:12px;z-index:2}.skip:focus{top:12px}
+header{border-bottom:1px solid var(--cp-border);background:var(--cp-bg-elevated)}.top{max-width:1180px;margin:auto;padding:20px 28px;display:flex;flex-wrap:wrap;gap:20px;align-items:center;justify-content:space-between}.brand{font-weight:700;color:var(--cp-text);text-decoration:none;font-size:18px}nav{display:flex;flex-wrap:wrap;gap:20px;align-items:center}nav a{text-decoration:none;color:var(--cp-text-muted);font-size:14px}nav a[aria-current]{color:var(--cp-accent);border-bottom:2px solid var(--cp-accent)}select{font:inherit;font-size:13px;padding:6px;background:var(--cp-surface);color:var(--cp-text);border:1px solid var(--cp-border)}
+main{max-width:1180px;margin:auto;padding:42px 28px 70px}.eyebrow{font-size:12px;font-weight:700;text-transform:uppercase;color:var(--cp-accent)}h1{font-size:40px;line-height:1.15;margin:12px 0 18px;max-width:950px;overflow-wrap:anywhere}h2{font-size:25px;line-height:1.25;margin:0 0 16px}h3{font-size:18px;margin:0 0 8px}p{margin:0 0 16px;max-width:78ch}.lead{font-size:19px;color:var(--cp-text-muted);max-width:75ch}.intro{padding-bottom:28px}.band{padding:36px 0;border-top:1px solid var(--cp-border)}.two{display:grid;grid-template-columns:1fr 1fr;gap:32px}.notice{padding:16px 20px;border-left:4px solid var(--cp-accent);background:var(--cp-accent-soft);margin:24px 0;font-size:15px}
+figure{margin:0}figure img{display:block;width:100%;height:300px;object-fit:contain;background:var(--cp-surface-soft);border:1px solid var(--cp-border)}figcaption{color:var(--cp-text-muted);font-size:14px;margin-top:12px}.figure-title{display:block;font-size:16px;font-weight:600;color:var(--cp-text)}.table-scroll{overflow-x:auto;margin:20px 0;border-top:2px solid var(--cp-accent)}table{border-collapse:collapse;width:100%;font-size:14px;min-width:620px}th,td{text-align:left;padding:13px 12px;border-bottom:1px solid var(--cp-border);vertical-align:top}th{background:var(--cp-surface-soft);font-weight:600}td.num{font-variant-numeric:tabular-nums;text-align:right}.muted{color:var(--cp-text-muted);font-size:14px}code,pre{font-family:Consolas,"Courier New",Courier,monospace}pre{background:var(--cp-surface-soft);padding:20px;overflow:auto;border:1px solid var(--cp-border);font-size:13px}.flow{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin:24px 0}.step{padding:18px;border:1px solid var(--cp-border);background:var(--cp-bg-elevated);min-height:145px}.step span{display:block;font-size:12px;color:var(--cp-accent);font-weight:700}.step p{font-size:14px;color:var(--cp-text-muted);margin:6px 0 0}.bars{max-width:800px}.bar-row{display:grid;grid-template-columns:180px 1fr 65px;gap:16px;align-items:center;margin:16px 0;font-size:14px}.track{height:16px;background:var(--cp-surface-soft)}.fill{height:16px;background:var(--cp-accent)}ul{padding-left:22px;max-width:78ch}li{margin:8px 0}footer{border-top:1px solid var(--cp-border);background:var(--cp-bg-elevated);padding:24px 28px;font-size:13px;color:var(--cp-text-muted)}footer div{max-width:1124px;margin:auto;display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between}
+.two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.two>*{min-width:0}.table-scroll{max-width:100%;min-width:0}
+@media(max-width:700px){.top{padding:18px}.brand{font-size:16px}nav{gap:14px}main{padding:30px 18px 50px}h1{font-size:30px}.lead{font-size:17px}.two{grid-template-columns:1fr;gap:28px}.flow{grid-template-columns:1fr 1fr}figure img{height:240px}.bar-row{grid-template-columns:110px 1fr 48px;gap:8px}.band{padding:28px 0}}
+@media(prefers-reduced-motion:no-preference){main{animation:appear .3s ease-out}@keyframes appear{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}}
+</style></head><body><a class="skip" href="#main">Skip to content</a><header><div class="top"><a class="brand" href="index.html">Visual Engineering CAD Agent</a><nav aria-label="Main navigation"><a href="index.html" aria-current="page">Overview</a><a href="examples.html">Examples</a><a href="architecture.html">Architecture</a><a href="experiments.html">Experiments</a><a href="https://github.com/faustinopalma/visual-engineering-cad-agent">GitHub</a><select id="theme" aria-label="Color theme"><option value="light">Light</option><option value="dark">Dark</option></select></nav></div></header><main id="main"><section class="intro"><div class="eyebrow">Experimental local converter</div><h1>Visual Engineering CAD Agent</h1><p class="lead">Convert drawing images and PDFs into editable CAD with FreeCAD or QCAD.</p><p>A model reads the drawing and proposes components. Local scripts create the CAD file, reopen it for checks, and render it for review.</p></section>
+<section class="band"><h2>Working examples</h2><div class="two"><figure><a href="assets/freecad-synthetic.png"><img src="assets/freecad-synthetic.png" alt="FreeCAD rectangle and two circles after a dimension change" width="1200" height="800"></a><figcaption><span class="figure-title">FreeCAD: dimension changes</span>Changing the rectangle width updates the constrained geometry. Measurements are checked after reopening the saved file.</figcaption></figure><figure><a href="assets/qcad-hatch.png"><img src="assets/qcad-hatch.png" alt="QCAD section hatch with an internal hole" width="1200" height="800"></a><figcaption><span class="figure-title">QCAD: native section hatch</span>The hatch uses closed boundaries and excludes the internal hole. Pattern, area and layer are checked after reopening the DXF.</figcaption></figure></div></section>
+<section class="band"><h2>Current scope</h2><p>The local agent supports generation, CAD checks and model-requested corrections. Remote conversion jobs are planned. FreeCAD and QCAD remain under evaluation.</p><p><a href="examples.html">Input and output examples</a> &nbsp; <a href="architecture.html">Architecture</a> &nbsp; <a href="experiments.html">Results and timings</a></p><p class="muted">Generated drawings remain drafts requiring technical review.</p></section>
+<section class="band two"><div><h2>Backend choices</h2><p>FreeCAD supports constraints and a possible future 3D workflow. QCAD supports 2D layers, blocks, polylines and hatches. The project currently reconstructs 2D drawings only.</p></div><div><h2>Reuse</h2><p>Code and documentation use MIT. Outputs include native CAD, DXF, JSON, PNG and PDF. Rough sketches are a possible next input; they need adapted prompts and fresh tests.</p><p class="muted">Private drawings and derived images are excluded. Third-party software keeps its own license.</p></div></section></main><footer><div><span>MIT project code and documentation. Third-party software retains its own licenses.</span><a href="https://github.com/faustinopalma/visual-engineering-cad-agent/blob/main/EVOLVING_CAD_AGENT_PLAN.md">Evolving project plan</a><span>Experiment snapshot: October 2026</span></div></footer>
+<script>const theme=document.getElementById("theme");theme.value=document.documentElement.getAttribute("data-theme");theme.addEventListener("change",()=>{document.documentElement.setAttribute("data-theme",theme.value);const url=new URL(location.href);url.searchParams.set("scoutTheme",theme.value);history.replaceState(null,"",url);});</script></body></html>

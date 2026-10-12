@@ -1,0 +1,45 @@
+import json
+import os
+import socket
+import sys
+from pathlib import Path
+import traceback
+
+import FreeCAD as App
+import FreeCADGui as Gui
+from PySide import QtCore
+
+
+PROFILE = Path(os.environ["CAD_AGENT_MCP_PROFILE"])
+
+
+def initialize():
+    if os.environ.get("CAD_AGENT_BACKGROUND") == "1":
+        Gui.getMainWindow().showMinimized()
+    report = {"status": "failed", "data_path": App.getUserAppDataDir(), "version": App.Version()}
+    try:
+        if Path(App.getUserAppDataDir()).resolve() != PROFILE.resolve():
+            raise RuntimeError("Refusing to start bridge outside the isolated workspace profile.")
+        port = int(os.environ["FREECAD_XMLRPC_PORT"])
+        if os.environ.get("CAD_AGENT_MCP_CANDIDATE", "neka") == "robust":
+            global robust_plugin
+            sys.path.insert(0, str(PROFILE / "Mod/FreecadRobustMCPBridge"))
+            from freecad_mcp_bridge.server import FreecadMCPPlugin
+            robust_plugin = FreecadMCPPlugin(host="127.0.0.1", port=port + 1, xmlrpc_port=port, enable_xmlrpc=True)
+            robust_plugin.start()
+        else:
+            Gui.activateWorkbench("FreeCADMCPAddonWorkbench")
+            from rpc_server.rpc_server import start_rpc_server
+            start_rpc_server(port)
+        report["status"] = "started"
+    except Exception:
+        report["error"] = traceback.format_exc()
+        for name in list(App.listDocuments()):
+            App.closeDocument(name)
+        Gui.getMainWindow().close()
+    (PROFILE / "ready.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    with socket.create_connection(("127.0.0.1", int(os.environ["CAD_AGENT_READY_PORT"])), timeout=5) as connection:
+        connection.sendall(json.dumps(report).encode("utf-8"))
+
+
+QtCore.QTimer.singleShot(0, initialize)

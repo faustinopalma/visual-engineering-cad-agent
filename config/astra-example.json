@@ -1,0 +1,19 @@
+{
+  "cli_config_dir": "REPLACE_WITH_YOUR_ISOLATED_AZURE_CLI_DIRECTORY",
+  "subscription": "REPLACE_WITH_YOUR_SUBSCRIPTION_ID",
+  "tenant": "REPLACE_WITH_YOUR_TENANT_ID",
+  "resource_group": "REPLACE_WITH_YOUR_RESOURCE_GROUP",
+  "account": "REPLACE_WITH_YOUR_ACCOUNT",
+  "endpoint": "https://REPLACE_WITH_YOUR_ACCOUNT.openai.azure.com/openai/v1/responses",
+  "deployment": "REPLACE_WITH_YOUR_VISION_DEPLOYMENT",
+  "model_version": "REPLACE_WITH_VERIFIED_MODEL_VERSION",
+  "token_resource": "https://ai.azure.com",
+  "reasoning_effort": "high",
+  "max_output_tokens": 16000,
+  "analysis_max_output_tokens": 10000,
+  "max_calls_per_route": 3,
+  "max_total_tokens_per_route": 65000,
+  "request_timeout_seconds": 360,
+  "route_timeout_seconds": 1500,
+  "prices_usd_per_million": null
+}

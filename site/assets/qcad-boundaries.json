@@ -1,0 +1,85 @@
+{
+  "entities": [
+    {
+      "type": "hatch",
+      "component": "Section",
+      "layer": "HATCH",
+      "loops": [
+        [
+          [
+            2.5,
+            27.5
+          ],
+          [
+            27.5,
+            27.5
+          ],
+          [
+            27.5,
+            7.5
+          ],
+          [
+            2.5,
+            7.5
+          ]
+        ],
+        [
+          [
+            10.0,
+            22.5
+          ],
+          [
+            10.0,
+            15.0
+          ],
+          [
+            17.5,
+            15.0
+          ],
+          [
+            17.5,
+            22.5
+          ]
+        ]
+      ],
+      "pattern": "ANSI31",
+      "angle": 0,
+      "scale": 1.5,
+      "area": 443.75,
+      "id": "Q0001"
+    },
+    {
+      "type": "polyline",
+      "points": [
+        [
+          2.5,
+          27.5
+        ],
+        [
+          27.5,
+          27.5
+        ],
+        [
+          27.5,
+          7.5
+        ],
+        [
+          2.5,
+          7.5
+        ]
+      ],
+      "closed": true,
+      "component": "Section",
+      "layer": "OUTLINE",
+      "id": "Q0002"
+    }
+  ],
+  "component_meanings": {
+    "Section": "sectioned material around hole"
+  },
+  "units": "mm",
+  "unit_status": "Display scale only, physical dimensions unconfirmed.",
+  "status": "needs_review",
+  "human_confirmation": false,
+  "native_qcad": true
+}
