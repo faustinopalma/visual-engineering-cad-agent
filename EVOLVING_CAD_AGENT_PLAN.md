@@ -1,6 +1,6 @@
 # Evolving CAD Agent Plan
 
-Status: October 11, 2026. Local experimentation and agent execution are implemented; reliable unattended conversion and remote CAD jobs remain in development. FreeCAD and QCAD are both active candidates, not a settled production choice.
+Status: October 12, 2026. The public repository and documentation site are published. Local agent experiments run; reliable unattended conversion and remote CAD jobs remain in development. FreeCAD and QCAD are both active candidates.
 
 ## Direction
 
@@ -18,7 +18,7 @@ The goal is to reconstruct components and relationships, not every raster mark. 
 | QCAD | Blocks, native polylines, layers and hatches with internal voids | Curved clipping fidelity, associativity and hosting license review |
 | Corpus | Independent selected-view and whole-sheet Astra/Sol campaigns | Representative quality acceptance and fair performance comparison |
 | Operations | Progressive checkpoints, request receipts, deadlines, token renewal, minimized FreeCAD startup | Mid-route recovery and verified locked-session execution |
-| Publication | Local conceptual documentation and comparison artifacts | Rights review, curated GitHub release and experiment site |
+| Publication | Public GitHub repository and Pages site with synthetic examples and aggregate metrics | Separate rights approval before publishing private drawings or derived images |
 
 Native execution is more mature than semantic reconstruction. Some valid CAD drafts are rejected by the evaluator; some earlier evaluations accepted known contour defects. Experiments establish capabilities and expose gaps, not production readiness.
 
@@ -67,6 +67,6 @@ Project-authored code and documentation use the [MIT license](LICENSE). Third-pa
 
 Before GitHub publication, curate reusable code, synthetic fixtures and cleared examples. Exclude credentials, private configurations and raw operational/customer artifacts unless explicitly reviewed. Git initialization, staging and publication still require user approval.
 
-The future site should offer mission and architecture pages, backend discussions and an experiment index with curated comparisons. Each experiment should answer a reusable question: what was tested, what the evidence supports, and what remains unknown. Logs support the explanation rather than dominate it. Site creation and publishing are planned, not performed.
+The [site](https://faustinopalma.github.io/visual-engineering-cad-agent/) contains overview, input/output examples, architecture and experiment results. Examples use synthetic geometry and include downloads. Private drawings and scan-derived comparisons remain local.
 
 Start with the [README](README.md) and [public experiment findings](docs/public/experiments.md). Private run artifacts and supplied drawings remain outside the public repository. The user authorized public Git initialization, commits, push and GitHub Pages publication on October 12, 2026; further remote CAD infrastructure remains subject to separate approval.
