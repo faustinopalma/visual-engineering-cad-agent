@@ -1,6 +1,6 @@
 # What the Experiments Establish
 
-These are local feasibility experiments, not a validated production converter. The public release includes synthetic visual examples and aggregate measurements only. Original customer drawings, scan-derived previews, private configuration and raw provider responses are not distributed.
+These are local feasibility experiments, not a validated production converter. The user authorized publication of [the supplied drawing set](../../drawings) and [selected input/output cases](../../site/examples.html). The separate private-originals folder, private configuration and raw provider responses are not distributed.
 
 ## Native Operations Before Recognition
 

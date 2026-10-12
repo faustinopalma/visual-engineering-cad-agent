@@ -4,7 +4,7 @@ from pathlib import Path
 import shutil
 import json
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageOps
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,9 +69,10 @@ a{color:var(--cp-link);text-underline-offset:4px}a:hover{color:var(--cp-accent)}
 header{border-bottom:1px solid var(--cp-border);background:var(--cp-bg-elevated)}.top{max-width:1180px;margin:auto;padding:20px 28px;display:flex;flex-wrap:wrap;gap:20px;align-items:center;justify-content:space-between}.brand{font-weight:700;color:var(--cp-text);text-decoration:none;font-size:18px}nav{display:flex;flex-wrap:wrap;gap:20px;align-items:center}nav a{text-decoration:none;color:var(--cp-text-muted);font-size:14px}nav a[aria-current]{color:var(--cp-accent);border-bottom:2px solid var(--cp-accent)}select{font:inherit;font-size:13px;padding:6px;background:var(--cp-surface);color:var(--cp-text);border:1px solid var(--cp-border)}
 main{max-width:1180px;margin:auto;padding:42px 28px 70px}.eyebrow{font-size:12px;font-weight:700;text-transform:uppercase;color:var(--cp-accent)}h1{font-size:40px;line-height:1.15;margin:12px 0 18px;max-width:950px;overflow-wrap:anywhere}h2{font-size:25px;line-height:1.25;margin:0 0 16px}h3{font-size:18px;margin:0 0 8px}p{margin:0 0 16px;max-width:78ch}.lead{font-size:19px;color:var(--cp-text-muted);max-width:75ch}.intro{padding-bottom:28px}.band{padding:36px 0;border-top:1px solid var(--cp-border)}.two{display:grid;grid-template-columns:1fr 1fr;gap:32px}.notice{padding:16px 20px;border-left:4px solid var(--cp-accent);background:var(--cp-accent-soft);margin:24px 0;font-size:15px}
 figure{margin:0}figure img{display:block;width:100%;height:300px;object-fit:contain;background:var(--cp-surface-soft);border:1px solid var(--cp-border)}figcaption{color:var(--cp-text-muted);font-size:14px;margin-top:12px}.figure-title{display:block;font-size:16px;font-weight:600;color:var(--cp-text)}.table-scroll{overflow-x:auto;margin:20px 0;border-top:2px solid var(--cp-accent)}table{border-collapse:collapse;width:100%;font-size:14px;min-width:620px}th,td{text-align:left;padding:13px 12px;border-bottom:1px solid var(--cp-border);vertical-align:top}th{background:var(--cp-surface-soft);font-weight:600}td.num{font-variant-numeric:tabular-nums;text-align:right}.muted{color:var(--cp-text-muted);font-size:14px}code,pre{font-family:Consolas,"Courier New",Courier,monospace}pre{background:var(--cp-surface-soft);padding:20px;overflow:auto;border:1px solid var(--cp-border);font-size:13px}.flow{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin:24px 0}.step{padding:18px;border:1px solid var(--cp-border);background:var(--cp-bg-elevated);min-height:145px}.step span{display:block;font-size:12px;color:var(--cp-accent);font-weight:700}.step p{font-size:14px;color:var(--cp-text-muted);margin:6px 0 0}.bars{max-width:800px}.bar-row{display:grid;grid-template-columns:180px 1fr 65px;gap:16px;align-items:center;margin:16px 0;font-size:14px}.track{height:16px;background:var(--cp-surface-soft)}.fill{height:16px;background:var(--cp-accent)}ul{padding-left:22px;max-width:78ch}li{margin:8px 0}footer{border-top:1px solid var(--cp-border);background:var(--cp-bg-elevated);padding:24px 28px;font-size:13px;color:var(--cp-text-muted)}footer div{max-width:1124px;margin:auto;display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between}
-.two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.two>*{min-width:0}.table-scroll{max-width:100%;min-width:0}
+.two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.two>*{min-width:0}.table-scroll{max-width:100%;min-width:0}.comparison img{height:400px}.intro.home{padding-bottom:12px}.home+.band{padding-top:24px}
 @media(max-width:700px){.top{padding:18px}.brand{font-size:16px}nav{gap:14px}main{padding:30px 18px 50px}h1{font-size:30px}.lead{font-size:17px}.two{grid-template-columns:1fr;gap:28px}.flow{grid-template-columns:1fr 1fr}figure img{height:240px}.bar-row{grid-template-columns:110px 1fr 48px;gap:8px}.band{padding:28px 0}}
 @media(prefers-reduced-motion:no-preference){main{animation:appear .3s ease-out}@keyframes appear{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}}
+@media(max-width:700px){.comparison img{height:280px}}
 """
 
 
@@ -87,9 +88,46 @@ def page(filename, title, content):
     (SITE / filename).write_text(document, encoding="utf-8")
 
 
-def build(copy_assets=False):
+def copy_reviewed_drawings():
+    campaign = ROOT / "work/qcad-native-astra-sol-all-20261011"
+    cases = [("05", "astra", "Mechanical assembly", "Three views, a longitudinal section, native hatches and union fittings."),
+             ("01", "astra", "Section and plan", "Sectioned housing, internal passages, concentric details and mounting holes."),
+             ("07", "sol", "Turned component", "Stepped profile, rounded transitions and a knurled band.")]
+    released = []
+    for drawing, generator, title, description in cases:
+        result = json.loads((campaign / drawing / generator / "result.json").read_text())
+        cad = Path(result["last_valid_cad"])
+        geometry = json.loads((cad / "geometry.json").read_text())
+        if result["status"] != "internally_accepted" or geometry["status"] != "passed" or not geometry["reopened"]:
+            raise ValueError("Selected example did not pass the recorded checks.")
+        source = Image.open(campaign / drawing / "source/page.png").convert("RGB")
+        source.save(SITE / "assets" / ("drawing-" + drawing + "-input.png"))
+        output = Image.open(cad / "preview.png").convert("RGB")
+        mask = ImageChops.difference(output, Image.new("RGB", output.size, "white")).convert("L").point(lambda value: 255 if value > 50 else 0)
+        box = mask.getbbox()
+        if box is None:
+            raise ValueError("Blank example output.")
+        output = ImageOps.expand(output.crop(box), border=16, fill="white")
+        output.save(SITE / "assets" / ("drawing-" + drawing + "-output.png"))
+        shutil.copy2(cad / "draft.dxf", SITE / "assets" / ("drawing-" + drawing + "-output.dxf"))
+        released.append({"drawing": drawing, "generator": generator, "backend": "QCAD", "title": title,
+                         "description": description, "native_entities": len(geometry["entities"]),
+                         "native_hatches": sum(item["type"] == "hatch" for item in geometry["entities"]),
+                         "reopened": True, "internal_evaluation": "accepted", "human_dimensional_approval": False,
+                         "publication_authorization": "User authorized selected drawing inputs and outputs on October 12, 2026."})
+    (SITE / "assets/drawing-examples.json").write_text(json.dumps(released, indent=2) + "\n", encoding="utf-8")
+
+
+def drawing_pair(drawing, title, description):
+    name = "assets/drawing-" + drawing
+    return '<section class="band"><h2>' + escape(title) + '</h2><p>' + escape(description) + '</p><div class="two comparison"><figure><a href="' + name + '-input.png"><img src="' + name + '-input.png" alt="Original degraded scan for drawing ' + drawing + '"></a><figcaption><span class="figure-title">Input: original scan</span></figcaption></figure><figure><a href="' + name + '-output.png"><img src="' + name + '-output.png" alt="Actual native QCAD reconstruction of drawing ' + drawing + '"></a><figcaption><span class="figure-title">Output: editable CAD</span>Generated geometry, rendered from the saved DXF.</figcaption></figure></div><p style="margin-top:16px"><a href="' + name + '-output.dxf" download>Download DXF</a></p></section>'
+
+
+def build(copy_assets=False, reviewed_drawings=False):
     SITE.mkdir(exist_ok=True)
     (SITE / "assets").mkdir(exist_ok=True)
+    if reviewed_drawings:
+        copy_reviewed_drawings()
     if copy_assets:
         sources = {"freecad-synthetic.png": ROOT / "work/20261010T085534Z-94fa927a/revised.png",
                "freecad-input.png": ROOT / "work/20261010T085534Z-94fa927a/initial.png",
@@ -132,6 +170,23 @@ python -m unittest discover -s tests -p test_public_contract.py -v</code></pre><
 <section class="band two"><div><h2>Neka and Robust MCP</h2><p>Both passed 3/3 trials on the same 140-entity model. Median time including startup, rendering and cleanup: <strong>Neka 23.33 s</strong>, <strong>Robust 30.39 s</strong>.</p><p class="muted">This compares execution, not model interpretation. Six trials are too few to establish reliability.</p></div><div><h2>Full-sheet reconstruction</h2><div class="table-scroll"><table><thead><tr><th>Campaign</th><th>Astra accepted</th><th>Sol accepted</th></tr></thead><tbody><tr><td>FreeCAD Neka</td><td>4/10</td><td>5/10</td></tr><tr><td>Native QCAD</td><td>4/10</td><td>3/10</td></tr></tbody></table></div><p class="muted">Accepted by the common Astra evaluator, not by a human reviewer. Campaign conditions differed, so these are not backend accuracy rankings.</p></div></section>
 <section class="band"><h2>Where the QCAD campaign spent its time</h2><p>Twenty whole-sheet routes took 9 h 43 m 34 s wall time. CAD accounted for about 6 m 31 s; the model/correction workflow was the bottleneck.</p><div class="bars" aria-label="Recorded durations by phase"><div class="bar-row"><span>Analysis / 20 calls</span><div class="track"><div class="fill" style="width:18.3%"></div></div><span>63 min</span></div><div class="bar-row"><span>Generation / 75 calls</span><div class="track"><div class="fill" style="width:100%"></div></div><span>346 min</span></div><div class="bar-row"><span>Evaluation / 64 calls</span><div class="track"><div class="fill" style="width:48.2%"></div></div><span>167 min</span></div><div class="bar-row"><span>Successful CAD builds</span><div class="track"><div class="fill" style="width:1.9%"></div></div><span>6.5 min</span></div></div><div class="notice">Client-observed request duration includes network, service, reasoning and possible suspension. Roughly 29 minutes of Modern Standby events overlapped the run; do not add them again or interpret all waiting as cloud compute time.</div></section>
 <section class="band"><h2>Next tests</h2><ul><li>Check the evaluator against known defects.</li><li>Correct individual components instead of regenerating whole sheets.</li><li>Compare reasoning settings with the PC kept awake.</li><li>Test checkpoint recovery before remote hosting.</li></ul><p><a href="''' + REPOSITORY + '''/blob/main/docs/public/experiments.md">Test details and prerequisites</a></p><p class="muted">Original drawings, derived images and raw responses remain private.</p></section>''')
+    example_manifest = SITE / "assets/drawing-examples.json"
+    if example_manifest.exists():
+        cases = json.loads(example_manifest.read_text())
+        page("index.html", "Overview", '''<section class="intro home"><div class="eyebrow">Scanned drawing to CAD</div><h1>Convert old engineering drawings into editable CAD</h1><p class="lead">The system reads a PDF or image and rebuilds its components in FreeCAD or QCAD. It checks the saved geometry, compares the output with the scan, and refines the drawing for review.</p></section>'''
+             + drawing_pair("05", "A degraded assembly drawing, rebuilt in CAD", "Three views of an assembly, including a longitudinal section, internal passages, handle and union fittings. Cut material is represented by native hatches.")
+             + '''<section class="band"><h2>How the conversion works</h2><ol><li>The model identifies views, components and drawing conventions.</li><li>Local CAD scripts construct editable objects from validated data.</li><li>The file is saved, reopened and checked. An evaluator reviews the rendering and requests corrections when needed.</li></ol><p>The example above was built with QCAD and Astra. Its saved DXF passed native geometry and hatch checks. Dimensions that cannot be read reliably remain unconfirmed.</p><p><a href="examples.html">More reconstructed drawings</a> &nbsp; <a href="architecture.html">Architecture</a></p></section>
+<section class="band two"><div><h2>Two CAD backends</h2><p>QCAD provides 2D blocks, layers, polylines and hatches. FreeCAD provides sketches and constraints, with a potential future 3D extension. Both remain in development.</p></div><div><h2>Use and adaptation</h2><p>Code and documentation are MIT-licensed. The same pipeline could be adapted to rough sketches by changing interpretation instructions and testing the required geometry.</p><p><a href="experiments.html">Measurements and test scope</a></p></div></section>''')
+        content = '''<section class="intro"><div class="eyebrow">Actual reconstruction experiments</div><h1>Input and output</h1><p class="lead">Selected drawing scans and the editable CAD produced by the agent.</p><p>These are final outputs from the recorded experiments, not manually redrawn replacements. Each was saved and reopened successfully. They remain engineering drafts requiring dimensional review.</p></section>'''
+        for case in cases:
+            content += drawing_pair(case["drawing"], case["title"], case["description"] + " QCAD / " + ("Astra" if case["generator"] == "astra" else "GPT-6.1 Sol") + ".")
+        content += '''<section class="band"><h2>What is included</h2><p>Downloads contain native DXF entities, not embedded scans. The ten supplied PDF and TIFF inputs are available in the <a href="''' + REPOSITORY + '''/tree/main/drawings">drawings folder</a>.</p><p>Selected inputs and outputs were cleared for publication by the user. This permission does not change ownership of the original drawings or license them under MIT.</p><p><a href="architecture.html">How the system is built</a> &nbsp; <a href="experiments.html">Test measurements</a></p></section>'''
+        page("examples.html", "Examples", content)
+        for name in ("architecture.html", "experiments.html"):
+            path = SITE / name
+            text = path.read_text().replace("Original drawings, derived images and raw responses remain private.",
+                "Selected drawing examples are published with authorization. Other originals, raw responses and private configuration remain local.")
+            path.write_text(text, encoding="utf-8")
     (SITE / ".nojekyll").write_text("", encoding="utf-8")
     print(str(SITE))
 
@@ -139,5 +194,6 @@ python -m unittest discover -s tests -p test_public_contract.py -v</code></pre><
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build the static public-safe documentation site.")
     parser.add_argument("--copy-local-synthetic-assets", action="store_true")
+    parser.add_argument("--copy-authorized-drawing-examples", action="store_true")
     args = parser.parse_args()
-    build(args.copy_local_synthetic_assets)
+    build(args.copy_local_synthetic_assets, args.copy_authorized_drawing_examples)

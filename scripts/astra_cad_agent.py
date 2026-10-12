@@ -539,7 +539,7 @@ def campaign(config_path, source, resume=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Local Astra-driven 2D CAD pilot with three deterministic backend routes.")
     parser.add_argument("--config", type=Path, default=ROOT / "config/astra-local.json")
-    parser.add_argument("--source", type=Path, default=ROOT / "disegni/disegno_05.pdf")
+    parser.add_argument("--source", type=Path, default=ROOT / "drawings/disegno_05.pdf")
     parser.add_argument("--resume-campaign", type=Path)
     parser.add_argument("--report-campaign", type=Path)
     parser.add_argument("--complete-direct-review", type=Path)

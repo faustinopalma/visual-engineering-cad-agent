@@ -39,13 +39,14 @@ Both remain active candidates. Selection will depend on quality, editability, re
 
 ## Feasibility Examples
 
-Open the site's [input/output examples](https://faustinopalma.github.io/visual-engineering-cad-agent/examples.html) for side-by-side views and downloadable synthetic CAD files.
+Open the site's [input/output examples](https://faustinopalma.github.io/visual-engineering-cad-agent/examples.html) for actual drawing reconstructions and downloadable DXF files. The home page shows the degraded assembly drawing and its reconstructed three-view CAD output.
 
-- [Synthetic parametric construction](site/assets/freecad-synthetic.png) demonstrates solver-driven FreeCAD geometry and saved-file checks, not scan recognition.
-- [Native hatch with an internal hole](site/assets/qcad-hatch.png) demonstrates a QCAD hatch whose pattern, area, loops and dedicated layer survive DXF reopening.
+- [Mechanical assembly reconstruction](site/assets/drawing-05-output.png) includes three views, a section with native hatches, internal passages and fittings.
+- [Section and plan reconstruction](site/assets/drawing-01-output.png) includes a housing, passages, concentric details and mounting holes.
+- [Turned component reconstruction](site/assets/drawing-07-output.png) includes a stepped profile and knurled band.
 - [Experiment findings](docs/public/experiments.md) explain independent generation, matched bridge execution and evaluator limitations.
 
-The [documentation site](https://faustinopalma.github.io/visual-engineering-cad-agent/) presents the architecture and aggregate findings. Private scan-derived comparisons are deliberately excluded from this public release. Separate campaigns and internal evaluator scores are not controlled rankings of backend quality.
+The [documentation site](https://faustinopalma.github.io/visual-engineering-cad-agent/) presents these selected examples, architecture and measurements. Supplied inputs are in [drawings](drawings). Native checks and internal acceptance establish a reviewable draft, not dimensional certification.
 
 ## Reusable Concepts and Formats
 
@@ -71,4 +72,4 @@ See the [public experiment guide](docs/public/experiments.md) for prerequisites,
 
 Improve the evaluator, correct individual components and implement checkpoint recovery. Model requests dominate processing time; CAD execution is a small part of the measured total.
 
-This public release contains reusable code, documentation, synthetic visuals and aggregate metrics. Original drawings, private configuration, scan-derived images and raw run artifacts remain local. Review confidentiality and source rights before adding further examples. Remote CAD hosting remains a roadmap, not a deployed service.
+This public release contains code, documentation, supplied drawings authorized for publication, selected input/output examples and aggregate metrics. The separate private-originals folder, configurations and raw run artifacts remain local. Remote CAD hosting remains a roadmap, not a deployed service.

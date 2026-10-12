@@ -19,7 +19,7 @@ MODELS = {"astra": ("lab-gpt-6-astra-20260919", "2026-09-03"),
 
 def prepare(campaign, backend="freecad-neka"):
     campaign.mkdir()
-    files = sorted((ROOT / "disegni").glob("disegno_*"))
+    files = sorted((ROOT / "drawings").glob("disegno_*"))
     if len(files) != 10:
         raise ValueError("Expected all ten original drawings.")
     inventory = []

@@ -1,0 +1,41 @@
+[
+  {
+    "drawing": "05",
+    "generator": "astra",
+    "backend": "QCAD",
+    "title": "Mechanical assembly",
+    "description": "Three views, a longitudinal section, native hatches and union fittings.",
+    "native_entities": 177,
+    "native_hatches": 12,
+    "reopened": true,
+    "internal_evaluation": "accepted",
+    "human_dimensional_approval": false,
+    "publication_authorization": "User authorized selected drawing inputs and outputs on October 12, 2026."
+  },
+  {
+    "drawing": "01",
+    "generator": "astra",
+    "backend": "QCAD",
+    "title": "Section and plan",
+    "description": "Sectioned housing, internal passages, concentric details and mounting holes.",
+    "native_entities": 180,
+    "native_hatches": 6,
+    "reopened": true,
+    "internal_evaluation": "accepted",
+    "human_dimensional_approval": false,
+    "publication_authorization": "User authorized selected drawing inputs and outputs on October 12, 2026."
+  },
+  {
+    "drawing": "07",
+    "generator": "sol",
+    "backend": "QCAD",
+    "title": "Turned component",
+    "description": "Stepped profile, rounded transitions and a knurled band.",
+    "native_entities": 88,
+    "native_hatches": 0,
+    "reopened": true,
+    "internal_evaluation": "accepted",
+    "human_dimensional_approval": false,
+    "publication_authorization": "User authorized selected drawing inputs and outputs on October 12, 2026."
+  }
+]

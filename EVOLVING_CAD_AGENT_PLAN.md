@@ -18,7 +18,7 @@ The goal is to reconstruct components and relationships, not every raster mark. 
 | QCAD | Blocks, native polylines, layers and hatches with internal voids | Curved clipping fidelity, associativity and hosting license review |
 | Corpus | Independent selected-view and whole-sheet Astra/Sol campaigns | Representative quality acceptance and fair performance comparison |
 | Operations | Progressive checkpoints, request receipts, deadlines, token renewal, minimized FreeCAD startup | Mid-route recovery and verified locked-session execution |
-| Publication | Public GitHub repository and Pages site with synthetic examples and aggregate metrics | Separate rights approval before publishing private drawings or derived images |
+| Publication | Public repository and Pages site; supplied drawings and selected real input/output examples authorized for release | Keep private originals, credentials and raw run artifacts excluded |
 
 Native execution is more mature than semantic reconstruction. Some valid CAD drafts are rejected by the evaluator; some earlier evaluations accepted known contour defects. Experiments establish capabilities and expose gaps, not production readiness.
 
@@ -67,6 +67,6 @@ Project-authored code and documentation use the [MIT license](LICENSE). Third-pa
 
 Before GitHub publication, curate reusable code, synthetic fixtures and cleared examples. Exclude credentials, private configurations and raw operational/customer artifacts unless explicitly reviewed. Git initialization, staging and publication still require user approval.
 
-The [site](https://faustinopalma.github.io/visual-engineering-cad-agent/) contains overview, input/output examples, architecture and experiment results. Examples use synthetic geometry and include downloads. Private drawings and scan-derived comparisons remain local.
+The [site](https://faustinopalma.github.io/visual-engineering-cad-agent/) opens with a real degraded assembly drawing and its reconstructed CAD output. Further selected input/output examples include DXF downloads. The user authorized the supplied drawing set and these selected derivatives on October 12, 2026; the separate private-originals folder stays local.
 
 Start with the [README](README.md) and [public experiment findings](docs/public/experiments.md). Private run artifacts and supplied drawings remain outside the public repository. The user authorized public Git initialization, commits, push and GitHub Pages publication on October 12, 2026; further remote CAD infrastructure remains subject to separate approval.

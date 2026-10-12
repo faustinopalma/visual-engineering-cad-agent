@@ -28,7 +28,7 @@ EVALUATION = {"type": "object", "properties": {
 def prepare(output):
     output.mkdir(parents=True)
     for drawing in ("01", "05", "07"):
-        source = ROOT / "disegni" / ("disegno_" + drawing + ".pdf")
+        source = ROOT / "drawings" / ("disegno_" + drawing + ".pdf")
         directory = output / drawing
         directory.mkdir()
         with pymupdf.open(source) as document:

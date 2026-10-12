@@ -38,6 +38,7 @@
 /docs/*
 !/docs/public/
 !/site/
+!/drawings/
 **/__pycache__/
 **/*.pyc
 **/.env*
