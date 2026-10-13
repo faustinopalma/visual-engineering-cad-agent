@@ -8,8 +8,11 @@
     "native_entities": 177,
     "native_hatches": 12,
     "reopened": true,
-    "internal_evaluation": "accepted",
+    "internal_evaluation": "internally_accepted",
     "human_dimensional_approval": false,
+    "source_campaign": "qcad-native-astra-sol-all-20261011",
+    "source_revision": "cad-4",
+    "selection_basis": "Latest persisted Astra revision, selected by the user for the examples.",
     "publication_authorization": "User authorized selected drawing inputs and outputs on October 12, 2026."
   },
   {
@@ -21,21 +24,27 @@
     "native_entities": 180,
     "native_hatches": 6,
     "reopened": true,
-    "internal_evaluation": "accepted",
+    "internal_evaluation": "internally_accepted",
     "human_dimensional_approval": false,
+    "source_campaign": "qcad-native-astra-sol-all-20261011",
+    "source_revision": "cad-3",
+    "selection_basis": "Latest persisted Astra revision, selected by the user for the examples.",
     "publication_authorization": "User authorized selected drawing inputs and outputs on October 12, 2026."
   },
   {
     "drawing": "07",
-    "generator": "sol",
+    "generator": "astra",
     "backend": "QCAD",
     "title": "Turned component",
     "description": "Stepped profile, rounded transitions and a knurled band.",
-    "native_entities": 88,
+    "native_entities": 91,
     "native_hatches": 0,
     "reopened": true,
-    "internal_evaluation": "accepted",
+    "internal_evaluation": "not_accepted",
     "human_dimensional_approval": false,
+    "source_campaign": "qcad-native-astra-sol-all-20261011",
+    "source_revision": "cad-4",
+    "selection_basis": "Latest persisted Astra revision, selected by the user for the examples.",
     "publication_authorization": "User authorized selected drawing inputs and outputs on October 12, 2026."
   }
 ]

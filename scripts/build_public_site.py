@@ -3,6 +3,7 @@ from html import escape
 from pathlib import Path
 import shutil
 import json
+import hashlib
 
 from PIL import Image, ImageChops, ImageDraw, ImageOps
 
@@ -92,13 +93,16 @@ def copy_reviewed_drawings():
     campaign = ROOT / "work/qcad-native-astra-sol-all-20261011"
     cases = [("05", "astra", "Mechanical assembly", "Three views, a longitudinal section, native hatches and union fittings."),
              ("01", "astra", "Section and plan", "Sectioned housing, internal passages, concentric details and mounting holes."),
-             ("07", "sol", "Turned component", "Stepped profile, rounded transitions and a knurled band.")]
+             ("07", "astra", "Turned component", "Stepped profile, rounded transitions and a knurled band.")]
     released = []
     for drawing, generator, title, description in cases:
         result = json.loads((campaign / drawing / generator / "result.json").read_text())
         cad = Path(result["last_valid_cad"])
+        latest_build = max(result["builds"], key=lambda build: build["attempt"])
         geometry = json.loads((cad / "geometry.json").read_text())
-        if result["status"] != "internally_accepted" or geometry["status"] != "passed" or not geometry["reopened"]:
+        if cad != Path(latest_build["directory"]):
+            raise ValueError("Selected example is not the latest persisted revision.")
+        if geometry["status"] != "passed" or not geometry["reopened"]:
             raise ValueError("Selected example did not pass the recorded checks.")
         source = Image.open(campaign / drawing / "source/page.png").convert("RGB")
         source.save(SITE / "assets" / ("drawing-" + drawing + "-input.png"))
@@ -113,14 +117,19 @@ def copy_reviewed_drawings():
         released.append({"drawing": drawing, "generator": generator, "backend": "QCAD", "title": title,
                          "description": description, "native_entities": len(geometry["entities"]),
                          "native_hatches": sum(item["type"] == "hatch" for item in geometry["entities"]),
-                         "reopened": True, "internal_evaluation": "accepted", "human_dimensional_approval": False,
+                         "reopened": True, "internal_evaluation": result["status"], "human_dimensional_approval": False,
+                         "source_campaign": campaign.name, "source_revision": cad.name,
+                         "selection_basis": "Latest persisted Astra revision, selected by the user for the examples.",
                          "publication_authorization": "User authorized selected drawing inputs and outputs on October 12, 2026."})
     (SITE / "assets/drawing-examples.json").write_text(json.dumps(released, indent=2) + "\n", encoding="utf-8")
 
 
 def drawing_pair(drawing, title, description):
     name = "assets/drawing-" + drawing
-    return '<section class="band"><h2>' + escape(title) + '</h2><p>' + escape(description) + '</p><div class="two comparison"><figure><a href="' + name + '-input.png"><img src="' + name + '-input.png" alt="Original degraded scan for drawing ' + drawing + '"></a><figcaption><span class="figure-title">Input: original scan</span></figcaption></figure><figure><a href="' + name + '-output.png"><img src="' + name + '-output.png" alt="Actual native QCAD reconstruction of drawing ' + drawing + '"></a><figcaption><span class="figure-title">Output: editable CAD</span>Generated geometry, rendered from the saved DXF.</figcaption></figure></div><p style="margin-top:16px"><a href="' + name + '-output.dxf" download>Download DXF</a></p></section>'
+    revision = hashlib.sha256((SITE / (name + "-output.dxf")).read_bytes()).hexdigest()[:12]
+    output = name + "-output.png?v=" + revision
+    download = name + "-output.dxf?v=" + revision
+    return '<section class="band"><h2>' + escape(title) + '</h2><p>' + escape(description) + '</p><div class="two comparison"><figure><a href="' + name + '-input.png"><img src="' + name + '-input.png" alt="Original degraded scan for drawing ' + drawing + '"></a><figcaption><span class="figure-title">Input: original scan</span></figcaption></figure><figure><a href="' + output + '"><img src="' + output + '" alt="Actual native QCAD reconstruction of drawing ' + drawing + '"></a><figcaption><span class="figure-title">Output: editable CAD</span>Generated geometry, rendered from the saved DXF.</figcaption></figure></div><p style="margin-top:16px"><a href="' + download + '" download>Download DXF</a></p></section>'
 
 
 def build(copy_assets=False, reviewed_drawings=False):
@@ -177,7 +186,7 @@ python -m unittest discover -s tests -p test_public_contract.py -v</code></pre><
              + drawing_pair("05", "A degraded assembly drawing, rebuilt in CAD", "Three views of an assembly, including a longitudinal section, internal passages, handle and union fittings. Cut material is represented by native hatches.")
              + '''<section class="band"><h2>How the conversion works</h2><ol><li>The model identifies views, components and drawing conventions.</li><li>Local CAD scripts construct editable objects from validated data.</li><li>The file is saved, reopened and checked. An evaluator reviews the rendering and requests corrections when needed.</li></ol><p>The example above was built with QCAD and Astra. Its saved DXF passed native geometry and hatch checks. Dimensions that cannot be read reliably remain unconfirmed.</p><p><a href="examples.html">More reconstructed drawings</a> &nbsp; <a href="architecture.html">Architecture</a></p></section>
 <section class="band two"><div><h2>Two CAD backends</h2><p>QCAD provides 2D blocks, layers, polylines and hatches. FreeCAD provides sketches and constraints, with a potential future 3D extension. Both remain in development.</p></div><div><h2>Use and adaptation</h2><p>Code and documentation are MIT-licensed. The same pipeline could be adapted to rough sketches by changing interpretation instructions and testing the required geometry.</p><p><a href="experiments.html">Measurements and test scope</a></p></div></section>''')
-        content = '''<section class="intro"><div class="eyebrow">Actual reconstruction experiments</div><h1>Input and output</h1><p class="lead">Selected drawing scans and the editable CAD produced by the agent.</p><p>These are final outputs from the recorded experiments, not manually redrawn replacements. Each was saved and reopened successfully. They remain engineering drafts requiring dimensional review.</p></section>'''
+        content = '''<section class="intro"><div class="eyebrow">Actual reconstruction experiments</div><h1>Input and output</h1><p class="lead">Selected drawing scans and the editable CAD produced by the agent.</p><p>All three examples use the latest saved Astra revision, selected for visual accuracy. These are actual experiment outputs, not manually redrawn replacements. Each passed native geometry and reopening checks; visual selection is separate from the automatic evaluator's verdict and dimensional approval.</p></section>'''
         for case in cases:
             content += drawing_pair(case["drawing"], case["title"], case["description"] + " QCAD / " + ("Astra" if case["generator"] == "astra" else "GPT-6.1 Sol") + ".")
         content += '''<section class="band"><h2>What is included</h2><p>Downloads contain native DXF entities, not embedded scans. The ten supplied PDF and TIFF inputs are available in the <a href="''' + REPOSITORY + '''/tree/main/drawings">drawings folder</a>.</p><p>Selected inputs and outputs were cleared for publication by the user. This permission does not change ownership of the original drawings or license them under MIT.</p><p><a href="architecture.html">How the system is built</a> &nbsp; <a href="experiments.html">Test measurements</a></p></section>'''
