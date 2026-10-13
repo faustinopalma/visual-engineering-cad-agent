@@ -39,6 +39,7 @@
 !/docs/public/
 !/site/
 !/drawings/
+!/.gitattributes
 **/__pycache__/
 **/*.pyc
 **/.env*
