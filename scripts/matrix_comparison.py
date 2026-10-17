@@ -122,6 +122,46 @@ def run(output):
         lock.unlink()
 
 
+TRANSPORT_ERRORS = ("10054", "timed out", "Connection", "connection", "RemoteDisconnected", "IncompleteRead")
+
+
+def retry_failed(output, limit=1):
+    """Preserve transport-failed routes (and arms seeded from a failed base) under a new name so `run` executes them again."""
+    plan = load(output / "plan.json")
+    retries = load(output / "retries.json", [])
+    marked = []
+    for route in plan["routes"]:
+        result = load(Path(route["dir"]) / "result.json")
+        if not result or result.get("status") not in ("failed", "supervisor_failed") or not any(text in str(result.get("error", "")) for text in TRANSPORT_ERRORS):
+            continue
+        if sum(item["route"] == route["id"] for item in retries) >= limit:
+            continue
+        marked.append(route)
+        if route["kind"] == "base":
+            marked += [arm for arm in plan["routes"] if arm.get("base") == route["id"] and arm not in marked]
+    for route in marked:
+        directory = Path(route["dir"])
+        if not directory.exists():
+            continue
+        result = load(directory / "result.json", {})
+        number = sum(item["route"] == route["id"] for item in retries) + 1
+        target = directory.with_name(directory.name + ".transport-failed-" + str(number))
+        directory.rename(target)
+        prefix = Path(os.path.relpath(directory, output)).as_posix().replace("/", "__") + "__"
+        for stale in sorted((output / "overlays").glob(prefix + "*")) if (output / "overlays").exists() else []:
+            stale.rename(stale.with_name("transport-failed-" + str(number) + "__" + stale.name))
+        supervisor = directory.parent / (directory.name + "-supervisor")
+        if supervisor.exists():
+            supervisor.rename(supervisor.with_name(supervisor.name + ".transport-failed-" + str(number)))
+        retries.append({"route": route["id"], "status": result.get("status"), "error": str(result.get("error", ""))[:200], "preserved_as": str(target),
+                        "reason": "transport failure" if result.get("status") in ("failed", "supervisor_failed") else "seeded from a transport-failed base",
+                        "calls": result.get("calls"), "input_tokens": result.get("input_tokens"), "output_tokens": result.get("output_tokens"),
+                        "unix_seconds": time.time()})
+        print(json.dumps({"retry": route["id"], "preserved_as": str(target)}), flush=True)
+    save(output / "retries.json", retries)
+    return marked
+
+
 def built(route_dir, result, include_seeded):
     rows = []
     for candidate in result.get("candidates", []):
@@ -257,6 +297,15 @@ def report(output):
              "Ink precision = share of CAD line pixels within 3 px of source ink; ink recall = share of source ink near CAD lines. Source ink includes text, dimensions, title block and hatching, so recall compares outputs of the same drawing. QCAD hatch fills are not counted as lines.",
              "Overlay judge: stateless call (" + load(output / "judge.config.json")["deployment"] + ") seeing only source and overlay, blind to model and strategy. For FreeCAD it is told that hatching is intentionally omitted. Same provider as drafter/evaluator: errors may be correlated.",
              "One route per cell; differences of a few points are within observed judge and route variation. Internal acceptance is not human approval; no USD cost verified."]
+    retries = load(output / "retries.json", [])
+    if retries:
+        notes.append("Transport retries: " + str(len(retries)) + " route run(s) failed on the network (connection reset or read timeout) or were seeded from such a base; they were preserved as *.transport-failed-N and rerun once with the same configuration: "
+                     + ", ".join(item["route"] for item in retries) + ". Their partial usage (" + fmt(sum(item.get("input_tokens") or 0 for item in retries)) + " input / "
+                     + fmt(sum(item.get("output_tokens") or 0 for item in retries)) + " output tokens recorded, more unknown) is not included in route costs.")
+    for entry in entries:
+        if entry["kind"] == "base" and not entry["final"]:
+            notes.append("Base " + entry["id"] + " produced no evaluated candidate (" + str(entry["result"].get("status")) + ": " + str(entry["result"].get("error", "-"))[:120]
+                         + "). Its arms continued from the shared analysis with only their own attempts, one fewer than other cells.")
     if judged:
         notes.append("Overlay judge usage: " + str(sum(item.get("calls", 0) for item in judged)) + " successful calls, " + str(sum(item.get("input_tokens", 0) for item in judged))
                      + " input / " + str(sum(item.get("output_tokens", 0) for item in judged)) + " output tokens" + (" plus " + str(failures) + " failed call(s) with unknown usage" if failures else "") + ".")
@@ -306,6 +355,8 @@ def viewer(output):
             detail = ("Shared start of both strategy arms." if base else ("; ".join(decisions(entry["result"])) or entry["result"].get("note", "")))
             if final and not base and final["origin"] == "base":
                 detail += " Final output is the shared base candidate (no improvement)."
+            if not base and entry["result"].get("candidates") and not any(item.get("seeded") for item in entry["result"]["candidates"]):
+                detail += " The shared base produced no evaluated candidate; this arm started from the shared analysis only."
             layer = {"key": entry["id"], "title": title, "detail": detail, "tags": [BACKENDS[backend]["title"], model.capitalize(), "base" if base else STRATEGIES[kind]],
                      "color": BASE_COLORS[(backend, model)] if base else COLORS[(backend, model, kind)], "dash": base,
                      "visible": not base and (backend, model, kind) == order[0], "attempt": final and final["attempt"],
@@ -335,7 +386,7 @@ def viewer(output):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("plan", "run", "overlay", "judge", "report", "viewer", "all"))
+    parser.add_argument("action", choices=("plan", "run", "retry-failed", "overlay", "judge", "report", "viewer", "all"))
     parser.add_argument("directory", type=Path)
     parser.add_argument("--source", type=Path, action="append", default=[], help="plan: prepared drawing source directory (contains view.png and page.png)")
     parser.add_argument("--model", action="append", default=[], help="plan: KEY=CONFIG, for example astra=path\\config.json")
@@ -347,6 +398,9 @@ if __name__ == "__main__":
         if not arguments.source or not arguments.model:
             parser.error("plan needs --source and --model")
         plan_matrix(directory, arguments.source, dict(item.split("=", 1) for item in arguments.model), arguments.base_attempts, arguments.arm_attempts)
+        raise SystemExit(0)
+    if arguments.action == "retry-failed":
+        retry_failed(directory)
         raise SystemExit(0)
     if arguments.action in ("run", "all"):
         run(directory)

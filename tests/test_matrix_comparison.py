@@ -99,6 +99,32 @@ class MatrixTests(unittest.TestCase):
             self.assertEqual(layers[0]["tags"], ["FreeCAD", "Astra", "edit-capable"])
             self.assertEqual(layers[0]["lines"], "M40.0,260.0 L200.0,260.0")
 
+    def test_retry_failed_preserves_transport_failures_and_dependent_arms(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            def route(identifier, kind, base=None):
+                return {"id": identifier, "kind": kind, "base": base, "dir": str(output / "06-qcad" / identifier.replace("/", "-"))}
+            routes = [route("b", "base"), route("b/edit", "drafter_choice", "b"), route("c", "base"), route("c/edit", "drafter_choice", "c")]
+            matrix_comparison.save(output / "plan.json", {"routes": routes})
+            results = {"b": {"status": "failed", "error": "[WinError 10054] An existing connection was forcibly closed"},
+                       "b/edit": {"status": "not_accepted"}, "c": {"status": "failed", "error": "ValueError: bad geometry"},
+                       "c/edit": {"status": "failed", "error": "The read operation timed out"}}
+            for item in routes:
+                Path(item["dir"]).mkdir(parents=True)
+                matrix_comparison.save(Path(item["dir"]) / "result.json", results[item["id"]])
+            (output / "overlays" / "06-qcad__b__cad-1").mkdir(parents=True)
+            marked = matrix_comparison.retry_failed(output)
+            self.assertEqual([item["id"] for item in marked], ["b", "b/edit", "c/edit"])
+            self.assertEqual([path.name for path in (output / "overlays").iterdir()], ["transport-failed-1__06-qcad__b__cad-1"])
+            self.assertTrue((output / "06-qcad" / "b.transport-failed-1" / "result.json").exists())
+            self.assertTrue((output / "06-qcad" / "b-edit.transport-failed-1").exists())
+            self.assertTrue((output / "06-qcad" / "c").exists())
+            retries = json.loads((output / "retries.json").read_text())
+            self.assertEqual([item["reason"] for item in retries], ["transport failure", "seeded from a transport-failed base", "transport failure"])
+            Path(routes[0]["dir"]).mkdir()
+            matrix_comparison.save(Path(routes[0]["dir"]) / "result.json", results["b"])
+            self.assertEqual(matrix_comparison.retry_failed(output), [])
+
 
 if __name__ == "__main__":
     unittest.main()
