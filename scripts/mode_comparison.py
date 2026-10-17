@@ -388,11 +388,12 @@ def measure(output):
         print(json.dumps({"overlay": row["id"]}), flush=True)
 
 
-def judge_once(config, view, target, filename, inference):
+def judge_once(config, view, target, filename, inference, note=""):
     client = AstraClient(config, target / inference)
     for retry in range(2):
         try:
-            judgment = client.call("overlay-judge" + ("-retry" if retry else ""), JUDGE_PROMPT, [view, target / "overlay.png"], JUDGE_SCHEMA, 16000)
+            judgment = client.call("overlay-judge" + ("-retry" if retry else ""), JUDGE_PROMPT + ((" " + note) if note else ""),
+                                   [view, target / "overlay.png"], JUDGE_SCHEMA, 16000)
             break
         except Exception as error:
             save(target / (filename.replace(".json", "") + "-error-" + str(retry) + ".json"), {"error": str(error), "usage_may_be_unknown": True})
@@ -402,7 +403,7 @@ def judge_once(config, view, target, filename, inference):
         if not isinstance(judgment[key], int) or not 0 <= judgment[key] <= 100:
             raise ValueError("Invalid overlay judge score.")
     usage = [item.get("usage") or {} for item in client.metrics]
-    result = dict(judgment, deployment=config["deployment"], calls=len(client.metrics),
+    result = dict(judgment, deployment=config["deployment"], calls=len(client.metrics), prompt_note=note or None,
                   input_tokens=sum(item.get("input_tokens", 0) for item in usage), output_tokens=sum(item.get("output_tokens", 0) for item in usage),
                   blind="Judge saw only the source view and the overlay; arm, mode, scores and history were withheld.")
     save(target / filename, result)
@@ -673,8 +674,9 @@ button{font:inherit;font-size:12px;padding:3px 8px;border:1px solid #9aa4ae;back
 <div id="stage"><div id="canvas"><img id="source" alt="Original drawing view"><svg id="layers" xmlns="http://www.w3.org/2000/svg"></svg></div></div>
 <button id="show" title="Show panel (H)">Show panel (H)</button>
 <div id="panel">
-<h1>Original vs reconstructions</h1>
+<h1 id="title">Original vs reconstructions</h1>
 <div class="tabs" id="tabs"></div>
+<div class="tabs" id="filters"></div>
 <div class="row"><label><input type="checkbox" id="original" checked> Original <span class="key">[0]</span></label><span>opacity</span><input type="range" id="opacity" min="0" max="100" value="55"></div>
 <div class="row"><span>CAD line width</span><input type="range" id="width" min="0.5" max="5" step="0.5" value="1.5"><span id="widthValue"></span></div>
 <div class="row"><button id="all">All layers</button><button id="none">No layers</button><button id="fit">Fit (F)</button><button id="hide">Hide panel (H)</button></div>
@@ -694,7 +696,10 @@ function val(v) { return v == null ? "-" : String(v); }
 function isOn(layer) { return layer.key in visible ? visible[layer.key] : layer.visible; }
 function apply() {
   canvas.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.s})`;
-  for (const group of svg.querySelectorAll("g[data-key]")) group.setAttribute("stroke-width", lineWidth / view.s);
+  for (const group of svg.querySelectorAll("g[data-key]")) {
+    group.setAttribute("stroke-width", lineWidth / view.s);
+    if (group.dataset.dash) group.setAttribute("stroke-dasharray", `${8 / view.s} ${5 / view.s}`);
+  }
 }
 function fit() {
   const d = drawing(), r = stage.getBoundingClientRect(), panel = document.getElementById("panel");
@@ -723,6 +728,7 @@ function build() {
     if (!layer.lines && !layer.fills) continue;
     const group = document.createElementNS(NS, "g");
     group.dataset.key = layer.key; group.setAttribute("stroke", layer.color); group.setAttribute("fill", "none");
+    if (layer.dash) group.dataset.dash = "1";
     group.setAttribute("stroke-linecap", "round"); group.setAttribute("stroke-linejoin", "round");
     for (const fill of layer.fills || []) {
       const path = document.createElementNS(NS, "path"); path.setAttribute("d", fill); path.setAttribute("fill", layer.color);
@@ -734,6 +740,12 @@ function build() {
   document.getElementById("tabs").replaceChildren(...DATA.drawings.map((item, index) => {
     const button = document.createElement("button"); button.textContent = item.label; button.className = index === current ? "active" : "";
     button.onclick = () => { current = index; build(); fit(); }; return button;
+  }));
+  const tags = [...new Set(d.layers.flatMap(layer => layer.tags || []))];
+  document.getElementById("filters").replaceChildren(...tags.map(tag => {
+    const button = document.createElement("button"); button.textContent = "only " + tag; button.title = "Show only layers tagged " + tag;
+    button.onclick = () => { for (const layer of d.layers) visible[layer.key] = !layer.error && (layer.tags || []).includes(tag); refresh(); };
+    return button;
   }));
   const list = document.getElementById("list"); list.replaceChildren();
   d.layers.forEach((layer, index) => {
@@ -790,6 +802,7 @@ window.addEventListener("keydown", event => {
 });
 window.addEventListener("keyup", event => { if (event.key === " ") { hold = false; refresh(); } });
 const params = new URLSearchParams(location.hash.slice(1));
+if (DATA.title) { document.getElementById("title").textContent = DATA.title; document.title = DATA.title; }
 if (params.has("drawing")) current = Math.max(0, Math.min(DATA.drawings.length - 1, Number(params.get("drawing")) || 0));
 if (params.get("panel") === "0") { document.getElementById("panel").classList.add("hidden"); document.getElementById("show").classList.add("on"); }
 build(); source.onload = fit; fit();

@@ -27,6 +27,11 @@ EVALUATION = {"type": "object", "properties": {
     "assessment": {"type": "string"}, "defects": {"type": "array", "items": {"type": "string"}},
     "correction_instructions": {"type": "string"}},
     "required": ["accepted", "score", "assessment", "defects", "correction_instructions"], "additionalProperties": False}
+NO_HATCH_GUIDANCE = ("This backend has no hatch entity. Do NOT draw section hatching, cross-hatching or material fill patterns, and never "
+                     "imitate them with line, polyline or spline entities. Draw only the section outlines and boundaries; hatching in the "
+                     "original is intentionally omitted.")
+NO_HATCH_REVIEW = ("This backend cannot create hatches: missing section hatching is intentional and NOT a defect. Hatch or fill strokes "
+                   "imitated with line, polyline or spline entities ARE a defect (wrong convention and clutter).")
 
 
 def prepare(output):
@@ -192,6 +197,8 @@ def worker(directory, method, config_path=None):
     coverage = config.get("coverage_instruction", "Interpret only the selected view, use page for context.")
     conventions += " " + coverage + " Model whole components before edges. Never use projected chamfer curves as a scalloped nut silhouette; separate continuous outer envelopes from internal facet/chamfer intersections when supported by the original."
     conventions += "\n" + qcad_guidance
+    if not native_qcad:
+        conventions += ("\n" + NO_HATCH_GUIDANCE)
     try:
         max_attempts = config.get("max_attempts", 4)
         if revision_mode not in REVISION_MODES:
@@ -287,7 +294,7 @@ def worker(directory, method, config_path=None):
                 checkpoint("native_build_failed")
                 continue
             state["phase"] = "independent_evaluation"
-            hatch_review = ""
+            hatch_review = " " + NO_HATCH_REVIEW
             if native_qcad:
                 native_report = json.loads((cad / "geometry.json").read_text())
                 hatch_count = sum(entity["type"] == "hatch" for entity in native_report["entities"])
