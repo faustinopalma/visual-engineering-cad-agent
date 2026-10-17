@@ -13,11 +13,12 @@ Original image or PDF
   -> deterministic validation and native CAD construction
   -> saved-file reopening, measurements and rendering
   -> separate visual evaluation
-  -> bounded corrections, rebuilt and reevaluated
+  -> drafter decision: edit a saved candidate or regenerate
+  -> rebuilt or natively edited, reopened and reevaluated
   -> editable draft, evidence and human review
 ```
 
-The model returns structured data, not executable code. Geometry checks verify the saved file. Visual evaluation checks the interpretation and requests corrections. Outputs still require technical review; unreadable dimensions remain unconfirmed.
+The model returns structured data, not executable code. Geometry checks verify the saved file. Visual evaluation checks the interpretation and reports defects. After each evaluation the drafter decides how to produce the next candidate: edit a previously built candidate with component-level operations (replace, append, add, remove) or regenerate the complete model. An edit copies the chosen candidate's native file; only named components change, and untouched components are compared after reopening. Earlier candidates are never modified. The evaluator is not told how a candidate was produced. Outputs still require technical review; unreadable dimensions remain unconfirmed.
 
 ## Evolution
 
@@ -63,13 +64,24 @@ With Python and the CAD prerequisites configured, start with diagnostics and syn
 ```powershell
 python .\scripts\cad_agent.py doctor --check-qcad
 python .\scripts\cad_agent.py smoke --gui --timeout 60
-python -m unittest discover -s tests -p test_public_contract.py -v
+python -m unittest discover -s tests -p "test_*.py" -v
+python .\scripts\incremental_edit.py smoke work\edit-smoke-qcad --method qcad
 ```
+
+The edit smoke builds a synthetic candidate and applies two chained native edits (`qcad`, `qcad-native`, `freecad-direct`, `freecad-neka` or `freecad-robust`); the output directory must not exist. Set `CAD_AGENT_NATIVE_TESTS=1` to include a QCAD-backed worker-loop test.
+
+The campaign worker accepts `revision_mode` (`drafter_choice` by default, or `full_regeneration` for the previous loop) and `max_attempts` (1-4) in its configuration. `--seed-route DIR` copies a finished route's analysis, receipts and validated CAD into a new directory and continues from them without changing the source, so different drafters or revision modes can start from identical candidates:
+
+```powershell
+python .\scripts\quality_campaign.py worker <case>\freecad-neka --method freecad-neka --config <config.json> --seed-route <finished-route>
+```
+
+The worker expects the source view at `<case>\source\view.png` and `page.png`.
 
 See the [public experiment guide](docs/public/experiments.md) for prerequisites, configuration and scope. Model experiments require authorized inference configuration and can incur charges. Originals and prior revisions are preserved; CAD runs use isolated profiles, progress receipts and deadlines. Automatic mid-route crash recovery remains incomplete.
 
 ## Next Milestone
 
-Improve the evaluator, correct individual components and implement checkpoint recovery. Model requests dominate processing time; CAD execution is a small part of the measured total.
+Improve the evaluator, measure on matched seeds whether drafter-selected edits outperform full regeneration, and implement checkpoint recovery. Model requests dominate processing time; CAD execution is a small part of the measured total.
 
 This public release contains code, documentation, supplied drawings authorized for publication, selected input/output examples and aggregate metrics. The separate private-originals folder, configurations and raw run artifacts remain local. Remote CAD hosting remains a roadmap, not a deployed service.

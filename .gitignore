@@ -15,6 +15,7 @@
 !/scripts/astra_client.py
 !/scripts/astra_cad_agent.py
 !/scripts/quality_campaign.py
+!/scripts/incremental_edit.py
 !/scripts/qcad_model.py
 !/scripts/neka_model_campaign.py
 !/scripts/agent_mcp_worker.py
@@ -31,6 +32,7 @@
 !/tests/
 /tests/*
 !/tests/test_public_contract.py
+!/tests/test_incremental_edit.py
 !/config/
 /config/*
 !/config/astra-example.json

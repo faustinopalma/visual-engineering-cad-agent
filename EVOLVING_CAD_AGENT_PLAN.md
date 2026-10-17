@@ -13,7 +13,7 @@ The goal is to reconstruct components and relationships, not every raster mark. 
 | Area | Demonstrated | Next requirement |
 |---|---|---|
 | Local CAD | Deterministic scripts, isolated profiles, native save/reopen checks | Packaged backend contract and unattended runtime validation |
-| Agent loop | Structured generation, independent visual evaluation, bounded corrections | Calibrated evaluator and component-targeted revisions |
+| Agent loop | Structured generation, independent visual evaluation, bounded corrections; drafter-selected component edits of saved native candidates | Calibrated evaluator; matched-seed comparison of editing versus full regeneration |
 | FreeCAD | Parametric synthetic edits, component sketches, direct and MCP execution | Better section representation; separately validated 3D extension |
 | QCAD | Blocks, native polylines, layers and hatches with internal voids | Curved clipping fidelity, associativity and hosting license review |
 | Corpus | Independent selected-view and whole-sheet Astra/Sol campaigns | Representative quality acceptance and fair performance comparison |
@@ -38,9 +38,9 @@ Verify build, inspect, render and export on known synthetic geometry before intr
 
 ### 2. Independent Local Agent
 
-Python orchestration runs without an active IDE assistant. Remote inference proposes structured data; trusted local code performs CAD operations. A separate evaluator compares the source with the actual native rendering and requests corrections. Every corrected result is reconstructed and reevaluated; human approval remains separate.
+Python orchestration runs without an active IDE assistant. Remote inference proposes structured data; trusted local code performs CAD operations. A separate evaluator compares the source with the actual native rendering and reports defects. The drafter then chooses to edit a saved candidate with component operations or to regenerate the whole model. Edits run on a copy of the chosen native document, preserve untouched components with post-reopen verification and never modify earlier candidates. Every result is reconstructed or edited, then reevaluated; human approval remains separate.
 
-The pilot implements this loop. Priorities are component-level corrections, evaluator calibration, a versioned contract for views/relations/measurements, and recovery from the last verified checkpoint. Current checkpoints expose saved progress but do not implement arbitrary mid-route restart.
+The pilot implements this loop. Priorities are evaluator calibration, evidence that component edits improve outcomes rather than only reduce rework, a versioned contract for views/relations/measurements, and recovery from the last verified checkpoint. Edits replace whole components; cross-component constraints and sub-component patches are not implemented. Seeded routes can continue from copied candidates, but checkpoints do not implement arbitrary mid-route restart.
 
 Record inference, CAD, retry and suspension effects separately. Use provider usage and verified prices for cost estimates. Experiments can be uncapped monetarily, but deadlines and finite correction attempts remain essential. More throughput quota does not eliminate single-request latency.
 

@@ -167,13 +167,25 @@ def process(command, output, environment, timeout):
     return metrics
 
 
-def build(model_path, output, backend):
+def build(model_path, output, backend, edit=None):
+    """Build a new native document, or edit a copy of a validated candidate when an edit plan is supplied."""
     output.mkdir()
     profile = output / "profile"
     profile.mkdir()
     environment = dict(os.environ, CAD_AGENT_MODEL=str(model_path), CAD_AGENT_OUTPUT=str(output),
                        FREECAD_USER_HOME=str(profile), APPDATA=str(profile), LOCALAPPDATA=str(profile),
                        PYTHONDONTWRITEBYTECODE="1")
+    environment.pop("CAD_AGENT_EDIT", None)
+    base_source = None
+    if edit is not None:
+        base_source = Path(edit["base_cad"]) / ("draft.dxf" if backend == "qcad" else "draft.FCStd")
+        if not (Path(edit["base_cad"]) / "build.json").exists() or not base_source.exists():
+            raise RuntimeError("Edit base is not a validated native candidate: " + str(base_source))
+        base_digest = hashlib.sha256(base_source.read_bytes()).hexdigest()
+        base_copy = output / ("base-" + base_source.name)
+        shutil.copy2(base_source, base_copy)
+        save(output / "edit-plan.json", dict(edit, base_native=str(base_copy), base_source=str(base_source), base_sha256=base_digest))
+        environment["CAD_AGENT_EDIT"] = str(output / "edit-plan.json")
     started = time.perf_counter()
     if backend == "freecad-direct":
         environment["CAD_AGENT_DIRECT"] = "1"
@@ -188,6 +200,8 @@ def build(model_path, output, backend):
         command = ["C:/Program Files/QCAD/qcadcmd.com", "-no-gui", "-allow-multiple-instances", "-config", str(profile),
                    "-autostart", str(ROOT / "scripts/qcad/restart_view.js"), "-model=" + str(model_path),
                    "-output=" + str(output / "draft.dxf")]
+        if edit is not None:
+            command.append("-edit=" + environment["CAD_AGENT_EDIT"])
         process(command, output, environment, 90)
         lines = (output / "stdout.log").read_text(encoding="utf-8").splitlines()
         result = json.loads(next(line.split("=", 1)[1] for line in lines if line.startswith("CAD_AGENT_REPORT=")))
@@ -215,6 +229,13 @@ def build(model_path, output, backend):
             raise RuntimeError("Native preview is blank.")
     metrics = {"seconds": time.perf_counter() - started, "entities": len(report["entities"]),
                "geometry_status": report["status"], "backend": backend}
+    if edit is not None:
+        if not report.get("edit", {}).get("preserved_verified"):
+            raise RuntimeError("Native edit did not verify preserved components after reopening.")
+        if hashlib.sha256(base_source.read_bytes()).hexdigest() != base_digest:
+            raise RuntimeError("Edit base document changed; previous candidate artifacts must remain unchanged.")
+        metrics.update(mode="edit_existing", base_attempt=edit.get("base_attempt"), base_cad=str(edit["base_cad"]),
+                       base_unchanged=True, operations=edit["counts"], preserved_components=len(edit["preserved"]))
     save(output / "build.json", metrics)
     return metrics
 

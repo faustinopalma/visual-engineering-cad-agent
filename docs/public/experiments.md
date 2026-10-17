@@ -6,6 +6,21 @@ These are local feasibility experiments, not a validated production converter. T
 
 FreeCAD's synthetic rectangle/two-circle test demonstrates a real dimension change, solver relationships and saved-file reopening. QCAD's synthetic section demonstrates a native ANSI31 hatch with two loops: material outside an internal void. Its reopened area is 443.75 provisional drawing units squared, with a dedicated HATCH layer and a closed OUTLINE polyline. This is persistence evidence, not accuracy evidence for a scan.
 
+## Editing Saved Candidates
+
+After an evaluation, the drafter chooses `edit_existing` or `regenerate`. An edit targets one validated candidate with component operations: replace, append, add or remove. The executor copies that candidate's native file, applies only those operations and saves the result as a new attempt. It then reopens the file and compares every untouched component with the original. FreeCAD compares sketch label, constraint count and geometry. QCAD compares block geometry signatures. The base file's hash must not change. The evaluator receives only the source and the new render, as before. `full_regeneration` keeps the previous correction loop for comparison.
+
+Synthetic chained edits passed for QCAD, native QCAD with a hatch, direct FreeCAD and FreeCAD Neka MCP. The chain was replace, append, add and remove, followed by a second edit of the result. A worker test uses scripted model responses with real QCAD execution. A scripted edit was also applied to a copy of a real Astra-generated FreeCAD Neka candidate: 20 components and 345 entities, built by the previous loop. It replaced one component and removed another. The edited file reopened with 330 entities. Its 18 untouched components were verified, and the source candidate's hash was unchanged. These checks validate the mechanism; they are not evidence that edits produce better reconstructions.
+
+Two live single-attempt routes continued the same seeded whole-sheet drawing-06 route: FreeCAD Neka, best prior score 80/100, and two earlier 450-edge budget failures. Both used the Astra drafter and evaluator. In both routes the drafter chose `regenerate`, reasoning that the failing proposal touched most components.
+
+| Route | Drafter decision | Outcome | Calls | Input tokens | Output tokens | Reasoning tokens | Seconds |
+|---|---|---|---:|---:|---:|---:|---:|
+| First live route | Regenerate | Failed validation: 451 of 450 edges | 1 | 24,293 | 15,604 | 8,286 | 294 |
+| Second live route | Regenerate | Native build of 425 entities; evaluator score 87/100, internally accepted | 2 | 26,826 | 17,451 | 8,993 | 407 |
+
+Before the second route, the candidate history also reported each model's measured budget use. This was the only change between the two routes. Two routes cannot attribute the difference to that change, and a live model-chosen edit has not yet been observed. Internal acceptance is not human approval. Comparing editing with full regeneration requires matched seeds, several drawings and independent review.
+
 ## Three Views, Four Methods
 
 Twelve independent interpretations used QCAD, direct FreeCAD, Neka MCP and Robust MCP. All constructed native files passed persistence checks. The internal evaluator accepted all final candidates, including a corrected second Robust candidate. Independent visual review nevertheless found incorrectly scalloped nut envelopes with high scores. The evaluator can be overconfident; these scores are not a reliable ranking of mechanical correctness.
@@ -43,7 +58,7 @@ Install [requirements](../../requirements.txt) in your own Python environment an
 ```powershell
 python scripts/cad_agent.py doctor --check-qcad
 python scripts/cad_agent.py smoke --gui --timeout 60
-python -m unittest discover -s tests -p test_public_contract.py -v
+python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
 Copy the structure of [the configuration example](../../config/astra-example.json) to your local, ignored configuration and replace placeholders. Never store secrets in it. The authenticated CLI token stays in memory. The corpus runners currently expect ten explicitly named local files and are laboratory entrypoints, not general folder services. There is no distributed queue or remote CAD worker yet.
