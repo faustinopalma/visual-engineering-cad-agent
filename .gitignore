@@ -16,6 +16,8 @@
 !/scripts/astra_cad_agent.py
 !/scripts/quality_campaign.py
 !/scripts/incremental_edit.py
+!/scripts/mode_comparison.py
+!/tests/test_mode_comparison.py
 !/scripts/qcad_model.py
 !/scripts/neka_model_campaign.py
 !/scripts/agent_mcp_worker.py
