@@ -126,6 +126,12 @@ class ReportTests(unittest.TestCase):
                 mode_comparison.add_arm(output, "06-freecad-neka", "drafter_choice", "drafter_choice-rerun", "again")
             rerun = output / "06-freecad-neka" / "drafter_choice-rerun"
             self.assertEqual(json.loads((output / "06-freecad-neka" / "drafter_choice-rerun.config.json").read_text())["revision_mode"], "drafter_choice")
+            other = Path(temporary) / "sol.config.json"
+            other.write_text(json.dumps({"deployment": "sol-x", "model_version": "v2", "evaluator_deployment": "other", "max_attempts": 9}))
+            mode_comparison.add_arm(output, "06-freecad-neka", "full_regeneration", "sol-full_regeneration", "drafter model", other)
+            sol = json.loads((output / "06-freecad-neka" / "sol-full_regeneration.config.json").read_text())
+            self.assertEqual((sol["deployment"], sol["model_version"], sol["revision_mode"], sol["max_attempts"]), ("sol-x", "v2", "full_regeneration", 2))
+            self.assertNotIn("evaluator_deployment", sol)
             rerun.mkdir()
             (rerun / "result.json").write_text(json.dumps({"status": "not_accepted", "candidates": [seeded, {"attempt": 2, "mode": "regenerate", "cad": "y", "score": 77, "accepted": False}]}))
             for name, adherence in (("06-freecad-neka__start", 60), ("06-freecad-neka__drafter_choice__2", 75)):
@@ -146,6 +152,7 @@ class ReportTests(unittest.TestCase):
             self.assertLess(table.index("| drafter_choice |"), table.index("| drafter_choice-rerun |"))
             self.assertLess(table.index("| drafter_choice-rerun |"), table.index("| full_regeneration |"))
             self.assertIn("Extra arm 06-freecad-neka / drafter_choice-rerun", text)
+            self.assertIn("same seed, evaluator and limits as full_regeneration, drafter sol-x", text)
             self.assertIn("| 06-freecad-neka/start | 60, 64 | 50, 47 | 4 | 3 |", text)
             self.assertIn("plus 1 failed call(s) with unknown usage", text)
             self.assertTrue((output / "report.html").exists())

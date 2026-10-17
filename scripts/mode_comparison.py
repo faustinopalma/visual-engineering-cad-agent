@@ -292,16 +292,27 @@ def ordered_arms(plan, label):
     return sorted(arms, key=lambda arm: (MODES.index(arm["mode"]), arm_name(arm) != arm["mode"], arm_name(arm)))
 
 
-def add_arm(output, label, mode, name, note):
-    """Append an extra arm (for example a rerun after a validator fix) without touching existing arms."""
+def drafter(config):
+    return config.get("deployment")
+
+
+def add_arm(output, label, mode, name, note, drafter_config=None):
+    """Append an extra arm (for example a rerun after a validator fix) without touching existing arms.
+
+    With drafter_config only the drafter deployment and model version are taken from that file; the seed, evaluator,
+    reasoning effort, limits and attempt budget stay those of the template arm."""
     plan = json.loads((output / "plan.json").read_text())
     if any(arm["label"] == label and arm_name(arm) == name for arm in plan["arms"]) or name in MODES:
         raise ValueError("Arm name already used: " + name)
     template = next(arm for arm in plan["arms"] if arm["label"] == label and arm["mode"] == mode and arm_name(arm) == mode)
+    settings = json.loads(Path(template["config"]).read_text())
+    if drafter_config:
+        other = json.loads(Path(drafter_config).read_text())
+        settings.update(deployment=other["deployment"], model_version=other.get("model_version"))
     config = output / label / (name + ".config.json")
-    save(config, json.loads(Path(template["config"]).read_text()))
+    save(config, settings)
     plan["arms"].append(dict(template, name=name, route=str(output / label / name), config=str(config), code=git_state(), note=note,
-                             added_unix_seconds=time.time()))
+                             drafter=drafter(settings), added_unix_seconds=time.time()))
     save(output / "plan.json", plan)
 
 
@@ -498,8 +509,11 @@ def report(output):
              "Overlay uses the pipeline's own pixel transform (no fitted alignment). Relative evidence only: not metrology, not human approval. One route per arm and drawing is too few for statistical conclusions."]
     for arm in plan["arms"]:
         if arm.get("note"):
+            same = "same seed and configuration as " + arm["mode"]
+            if arm.get("drafter") and arm["drafter"] != drafter(json.loads(Path(arm["config"]).parent.joinpath(arm["mode"] + ".config.json").read_text())):
+                same = "same seed, evaluator and limits as " + arm["mode"] + ", drafter " + arm["drafter"]
             notes.append("Extra arm " + arm["label"] + " / " + arm_name(arm) + " (code " + arm["code"]["commit"][:7] + ("+dirty" if arm["code"]["dirty"] else "")
-                         + ", same seed and configuration as " + arm["mode"] + "): " + arm["note"])
+                         + ", " + same + "): " + arm["note"])
     judged = [item for row in rows for item in ([row["judgment"]] if row["judgment"] else []) + row["repeats"]]
     failures = sum(row["judge_failures"] for row in rows)
     if judged:
@@ -569,6 +583,7 @@ if __name__ == "__main__":
     parser.add_argument("--mode", choices=MODES, help="add-arm: revision mode of the extra arm")
     parser.add_argument("--name", help="add-arm: unique arm name, for example drafter_choice-rerun")
     parser.add_argument("--note", help="add-arm: why the extra arm exists")
+    parser.add_argument("--drafter-config", type=Path, help="add-arm: take only the drafter deployment and model version from this config")
     parser.add_argument("--row", action="append", default=[], help="judge-repeat: output id to judge again")
     parser.add_argument("--count", type=int, default=2, help="judge-repeat: repeats per output")
     arguments = parser.parse_args()
@@ -576,7 +591,7 @@ if __name__ == "__main__":
     if arguments.action == "add-arm":
         if not (arguments.label and arguments.mode and arguments.name and arguments.note):
             parser.error("add-arm needs --label, --mode, --name and --note")
-        add_arm(directory, arguments.label, arguments.mode, arguments.name, arguments.note)
+        add_arm(directory, arguments.label, arguments.mode, arguments.name, arguments.note, arguments.drafter_config)
         raise SystemExit(0)
     if arguments.action == "judge-repeat":
         if not arguments.row:
