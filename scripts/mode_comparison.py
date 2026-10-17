@@ -377,6 +377,27 @@ def measure(output):
         print(json.dumps({"overlay": row["id"]}), flush=True)
 
 
+def judge_once(config, view, target, filename, inference):
+    client = AstraClient(config, target / inference)
+    for retry in range(2):
+        try:
+            judgment = client.call("overlay-judge" + ("-retry" if retry else ""), JUDGE_PROMPT, [view, target / "overlay.png"], JUDGE_SCHEMA, 16000)
+            break
+        except Exception as error:
+            save(target / (filename.replace(".json", "") + "-error-" + str(retry) + ".json"), {"error": str(error), "usage_may_be_unknown": True})
+            if retry:
+                raise
+    for key in ("adherence_score", "coverage_score"):
+        if not isinstance(judgment[key], int) or not 0 <= judgment[key] <= 100:
+            raise ValueError("Invalid overlay judge score.")
+    usage = [item.get("usage") or {} for item in client.metrics]
+    result = dict(judgment, deployment=config["deployment"], calls=len(client.metrics),
+                  input_tokens=sum(item.get("input_tokens", 0) for item in usage), output_tokens=sum(item.get("output_tokens", 0) for item in usage),
+                  blind="Judge saw only the source view and the overlay; arm, mode, scores and history were withheld.")
+    save(target / filename, result)
+    return result
+
+
 def judge(output):
     plan, rows = collect(output)
     config = json.loads((output / "judge.config.json").read_text())
@@ -385,24 +406,24 @@ def judge(output):
         target = output / "overlays" / row["id"].replace("/", "__")
         if (target / "overlay-judgment.json").exists():
             continue
-        client = AstraClient(config, target / "judge-inference")
-        view = output / row["label"] / "source" / "view.png"
-        for retry in range(2):
-            try:
-                judgment = client.call("overlay-judge" + ("-retry" if retry else ""), JUDGE_PROMPT, [view, target / "overlay.png"], JUDGE_SCHEMA, 16000)
-                break
-            except Exception as error:
-                save(target / ("judge-error-" + str(retry) + ".json"), {"error": str(error), "usage_may_be_unknown": True})
-                if retry:
-                    raise
-        for key in ("adherence_score", "coverage_score"):
-            if not isinstance(judgment[key], int) or not 0 <= judgment[key] <= 100:
-                raise ValueError("Invalid overlay judge score.")
-        usage = [item.get("usage") or {} for item in client.metrics]
-        save(target / "overlay-judgment.json", dict(judgment, deployment=config["deployment"], calls=len(client.metrics),
-             input_tokens=sum(item.get("input_tokens", 0) for item in usage), output_tokens=sum(item.get("output_tokens", 0) for item in usage),
-             blind="Judge saw only the source view and the overlay; arm, mode, scores and history were withheld."))
+        judgment = judge_once(config, output / row["label"] / "source" / "view.png", target, "overlay-judgment.json", "judge-inference")
         print(json.dumps({"judged": row["id"], "adherence": judgment["adherence_score"], "coverage": judgment["coverage_score"]}), flush=True)
+
+
+def judge_repeat(output, ids, count):
+    """Re-judge identical images to measure how much the judge's own scores vary."""
+    config = json.loads((output / "judge.config.json").read_text())
+    _, rows = collect(output)
+    known = {row["id"]: row for row in rows if row.get("cad")}
+    for row_id in ids:
+        row = known[row_id]
+        target = output / "overlays" / row_id.replace("/", "__")
+        for index in range(1, count + 1):
+            name = "overlay-judgment-repeat-" + str(index) + ".json"
+            if (target / name).exists():
+                continue
+            judgment = judge_once(config, output / row["label"] / "source" / "view.png", target, name, "judge-inference-repeat-" + str(index))
+            print(json.dumps({"repeat": row_id, "index": index, "adherence": judgment["adherence_score"], "coverage": judgment["coverage_score"]}), flush=True)
 
 
 def decisions(result):
@@ -434,6 +455,9 @@ def report(output):
         target = output / "overlays" / row["id"].replace("/", "__")
         row["metrics"] = json.loads((target / "overlay-metrics.json").read_text()) if (target / "overlay-metrics.json").exists() else {}
         row["judgment"] = json.loads((target / "overlay-judgment.json").read_text()) if (target / "overlay-judgment.json").exists() else {}
+        row["repeats"] = [json.loads(path.read_text()) for path in sorted(target.glob("overlay-judgment-repeat-*.json"))
+                          if "-error-" not in path.name] if target.exists() else []
+        row["judge_failures"] = len(list(target.glob("*error-*.json"))) if target.exists() else 0
         row["images"] = target if (target / "overlay.png").exists() else None
     results = {}
     for arm in plan["arms"]:
@@ -466,7 +490,7 @@ def report(output):
                 fmt(entry["metrics"].get("ink_precision"), percent=True), fmt(entry["metrics"].get("ink_recall"), percent=True),
                 "-" if start else fmt(result.get("calls")),
                 "-" if start else fmt(result.get("input_tokens")) + " / " + fmt(result.get("output_tokens")),
-                "-" if start else fmt(result.get("elapsed_seconds"), 0), "seed: not accepted" if start else result.get("status", "-")]
+                "-" if start else fmt(None if result.get("elapsed_seconds") is None else round(result["elapsed_seconds"])), "seed: not accepted" if start else result.get("status", "-")]
     notes = ["Same seed copy, configuration, model deployment and attempt limit (" + str(plan["max_attempts"]) + ") for both arms; arms ran sequentially with alternating order.",
              "Output = best new candidate of the arm by internal evaluator score; the seed row is the common starting point.",
              "Ink precision = share of CAD line pixels within " + str(TOLERANCE_PX) + " px of source ink (adherence of what was drawn). Ink recall = share of source ink near CAD; source ink includes text, dimensions and title block that must be omitted, so recall compares outputs of the same drawing only.",
@@ -476,6 +500,27 @@ def report(output):
         if arm.get("note"):
             notes.append("Extra arm " + arm["label"] + " / " + arm_name(arm) + " (code " + arm["code"]["commit"][:7] + ("+dirty" if arm["code"]["dirty"] else "")
                          + ", same seed and configuration as " + arm["mode"] + "): " + arm["note"])
+    judged = [item for row in rows for item in ([row["judgment"]] if row["judgment"] else []) + row["repeats"]]
+    failures = sum(row["judge_failures"] for row in rows)
+    if judged:
+        notes.append("Overlay judge usage: " + str(sum(item.get("calls", 0) for item in judged)) + " successful calls, "
+                     + str(sum(item.get("input_tokens", 0) for item in judged)) + " input / " + str(sum(item.get("output_tokens", 0) for item in judged))
+                     + " output tokens" + (" plus " + str(failures) + " failed call(s) with unknown usage" if failures else "")
+                     + ". Not included in the per-arm token columns, which cover only the drafter and internal evaluator.")
+    repeated = [row for row in rows if row["repeats"]]
+    repeat_lines, repeat_html = [], []
+    if repeated:
+        repeat_header = ["Output", "Adherence (first, repeats)", "Coverage (first, repeats)", "Adherence spread", "Coverage spread"]
+        repeat_lines = ["", "## Overlay judge repeatability", "", "Identical source and overlay judged again in fresh stateless calls.", "",
+                        "| " + " | ".join(repeat_header) + " |", "|---|---|---|---:|---:|"]
+        repeat_html = ["<tr>" + "".join("<th>" + html.escape(name) + "</th>" for name in repeat_header) + "</tr>"]
+        for row in repeated:
+            adherence = [row["judgment"]["adherence_score"]] + [item["adherence_score"] for item in row["repeats"]]
+            coverage = [row["judgment"]["coverage_score"]] + [item["coverage_score"] for item in row["repeats"]]
+            values = [row["id"], ", ".join(map(str, adherence)), ", ".join(map(str, coverage)),
+                      str(max(adherence) - min(adherence)), str(max(coverage) - min(coverage))]
+            repeat_lines.append("| " + " | ".join(values) + " |")
+            repeat_html.append("<tr>" + "".join("<td>" + html.escape(value) + "</td>" for value in values) + "</tr>")
     lines = ["# Edit-capable vs full-regeneration comparison", "", "Code: " + plan["code"]["branch"] + " @ " + plan["code"]["commit"][:7] + (" (uncommitted changes)" if plan["code"]["dirty"] else ""), "",
              "| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
     lines.extend("| " + " | ".join(cell.replace("|", "/") for cell in cells(entry)) + " |" for entry in summary)
@@ -486,7 +531,7 @@ def report(output):
         lines.append("| " + " | ".join(str(value).replace("|", "/") for value in (row["label"], row["arm"], row["attempt"], row.get("mode"), fmt(row.get("internal_score")),
                      fmt(row["judgment"].get("adherence_score")), fmt(row["judgment"].get("coverage_score")), fmt(row["metrics"].get("ink_precision"), percent=True),
                      fmt(row["metrics"].get("ink_recall"), percent=True), (row.get("error") or "")[:160])) + " |")
-    lines.extend(["", "## Notes", ""] + ["- " + note for note in notes] + ["", "## Overlay judge assessments", ""])
+    lines.extend(["", "## Notes", ""] + ["- " + note for note in notes] + repeat_lines + ["", "## Overlay judge assessments", ""])
     for entry in summary:
         if entry["judgment"]:
             lines.extend(["### " + entry["label"] + " / " + ("start" if entry["row_kind"] == "start" else entry["arm"]), "", entry["judgment"]["assessment"], ""])
@@ -507,14 +552,16 @@ def report(output):
             "table{border-collapse:collapse;font-size:13px}td,th{border:1px solid #c9d1d9;padding:6px;vertical-align:top}th{background:#eef2f6}tr.start td{background:#f7f7f2}"
             "img{max-width:260px;max-height:320px;display:block}figure{display:inline-block;margin:8px}figure img{max-width:300px}.muted{color:#888}</style>"
             "<h1>Edit-capable (drafter_choice) vs full regeneration</h1><p>Code " + html.escape(plan["code"]["branch"] + " @ " + plan["code"]["commit"][:7]) + "</p>"
-            + "".join(table) + "<h2>Notes</h2><ul>" + "".join("<li>" + html.escape(note) + "</li>" for note in notes) + "</ul><h2>Original views</h2>" + sources)
+            + "".join(table) + "<h2>Notes</h2><ul>" + "".join("<li>" + html.escape(note) + "</li>" for note in notes) + "</ul>"
+            + ("<h2>Overlay judge repeatability</h2><table>" + "".join(repeat_html) + "</table>" if repeat_html else "")
+            + "<h2>Original views</h2>" + sources)
     (output / "report.html").write_text(page, encoding="utf-8")
     print(json.dumps({"report": str(output / "report.md"), "html": str(output / "report.html"), "rows": len(summary)}), flush=True)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("run", "overlay", "judge", "report", "all", "add-arm"))
+    parser.add_argument("action", choices=("run", "overlay", "judge", "report", "all", "add-arm", "judge-repeat"))
     parser.add_argument("directory", type=Path)
     parser.add_argument("--seed-route", type=Path, action="append", default=[])
     parser.add_argument("--max-attempts", type=int, default=2)
@@ -522,12 +569,19 @@ if __name__ == "__main__":
     parser.add_argument("--mode", choices=MODES, help="add-arm: revision mode of the extra arm")
     parser.add_argument("--name", help="add-arm: unique arm name, for example drafter_choice-rerun")
     parser.add_argument("--note", help="add-arm: why the extra arm exists")
+    parser.add_argument("--row", action="append", default=[], help="judge-repeat: output id to judge again")
+    parser.add_argument("--count", type=int, default=2, help="judge-repeat: repeats per output")
     arguments = parser.parse_args()
     directory = arguments.directory.resolve()
     if arguments.action == "add-arm":
         if not (arguments.label and arguments.mode and arguments.name and arguments.note):
             parser.error("add-arm needs --label, --mode, --name and --note")
         add_arm(directory, arguments.label, arguments.mode, arguments.name, arguments.note)
+        raise SystemExit(0)
+    if arguments.action == "judge-repeat":
+        if not arguments.row:
+            parser.error("judge-repeat needs at least one --row, for example 06-freecad-neka/start")
+        judge_repeat(directory, arguments.row, arguments.count)
         raise SystemExit(0)
     if arguments.action in ("run", "all"):
         if not (directory / "plan.json").exists() and not arguments.seed_route:

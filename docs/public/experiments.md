@@ -19,7 +19,49 @@ Two live single-attempt routes continued the same seeded whole-sheet drawing-06 
 | First live route | Regenerate | Failed validation: 451 of 450 edges | 1 | 24,293 | 15,604 | 8,286 | 294 |
 | Second live route | Regenerate | Native build of 425 entities; evaluator score 87/100, internally accepted | 2 | 26,826 | 17,451 | 8,993 | 407 |
 
-Before the second route, the candidate history also reported each model's measured budget use. This was the only change between the two routes. Two routes cannot attribute the difference to that change, and a live model-chosen edit has not yet been observed. Internal acceptance is not human approval. Comparing editing with full regeneration requires matched seeds, several drawings and independent review.
+Before the second route, the candidate history also reported each model's measured budget use. This was the only change between the two routes. Two routes cannot attribute the difference to that change. Internal acceptance is not human approval.
+
+## Matched Comparison: Edit Versus Regeneration
+
+`scripts/mode_comparison.py` continued three finished, unaccepted whole-sheet routes twice each. The seeds were drawing 06 (FreeCAD Neka), drawing 03 (native QCAD) and drawing 10 (FreeCAD Neka).
+- **`drafter_choice` arm:** the drafter may edit a saved candidate or regenerate.
+- **`full_regeneration` arm:** the previous loop.
+
+Both arms of a drawing started from identical seed copies, with the seed's configuration (Astra drafter and evaluator, high reasoning) and a limit of two new attempts. Arms ran one at a time and alternated order between drawings.
+
+Each validated output was measured in three ways:
+- **Internal evaluator** score, from the loop itself.
+- **Overlay:** the reopened native geometry is drawn over the source view, using the pipeline's own transform with no fitted alignment.
+  - **Ink precision:** CAD line pixels within 3 px of source ink.
+  - **Ink recall:** source ink near CAD. Recall includes text, dimensions and the title block, so it is only comparable within one drawing.
+- **Overlay judge:** a stateless Astra call that sees only the source and the overlay, without arm or scores.
+
+| Drawing / backend | Arm | Drafter decisions | Valid new / attempts | Best internal score | Judge adherence / coverage | Ink precision / recall | Calls | Input / output tokens | Seconds |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 06 FreeCAD Neka | start (seed) | - | - | 80 | 88 / 80 | 81.2% / 40.5% | - | - | - |
+| 06 FreeCAD Neka | drafter_choice | regenerate (failed 450-edge budget), regenerate | 1 / 2 | 80 | 89 / 88 | 79.9% / 43.1% | 3 | 51,465 / 30,961 | 621 |
+| 06 FreeCAD Neka | full_regeneration | generate, generate (failed budget) | 1 / 2 | 82 | 87 / 84 | 81.4% / 41.5% | 3 | 29,774 / 32,286 | 581 |
+| 03 native QCAD | start (seed) | - | - | 81 | 89 / 85 | 79.6% / 25.6% | - | - | - |
+| 03 native QCAD | drafter_choice | edit (8 replaced, 1 added, 8 preserved), edit (rejected by a validator bug) | 1 / 2 | 78 | 89 / 93 | 78.8% / 26.8% | 3 | 62,610 / 19,507 | 364 |
+| 03 native QCAD | drafter_choice rerun | edit (5 replaced, 1 added, 11 preserved), edit (1 replaced, 1 appended, 15 preserved) | 2 / 2 | 92, internally accepted | 92 / 94 | 79.1% / 27.3% | 4 | 53,234 / 24,499 | 560 |
+| 03 native QCAD | full_regeneration | generate, generate | 2 / 2 | 82 | 91 / 94 | 78.4% / 26.8% | 4 | 35,408 / 35,199 | 624 |
+| 10 FreeCAD Neka | start (seed) | - | - | 82 | 93 / 95 | 69.2% / 23.7% | - | - | - |
+| 10 FreeCAD Neka | drafter_choice | edit (2 replaced, 1 added, 19 preserved), edit (1 replaced, 1 added, 21 preserved) | 2 / 2 | 80 | 88 / 86 | 72.4% / 23.4% | 4 | 49,719 / 24,119 | 713 |
+| 10 FreeCAD Neka | full_regeneration | generate, generate | 2 / 2 | 88, internally accepted | 89 / 92 | 72.3% / 24.5% | 4 | 25,540 / 30,823 | 637 |
+
+The table reports the arm's best new candidate by internal score. Tokens and seconds cover the drafter and internal evaluator only. The overlay judge used 23 further successful calls, 44,940 input and 76,830 output tokens, plus one HTTP 500 failure with unknown usage. Dollar costs were not verified.
+
+**The validator bug.** In the original 03 `drafter_choice` arm, the second edit was rejected as "preserved component changed". Native diagnosis showed that the untouched hatch angle had drifted by one ulp across a second DXF round trip: DXF stores angles in degrees. The check now uses the same 1e-7 tolerance as the reopen check. A native regression test reproduces the drift and still detects a real change. The arm was rerun with the fix from the same seed, and the original arm is kept in the table.
+
+**What the data shows:**
+- **When the drafter edits.** It chose edits on drawings 03 and 10, where the base candidate was valid and the defects were local. It chose regeneration on 06, where it was repairing an over-budget proposal. Every completed edit passed native preservation checks: 8 to 21 untouched components were verified after reopening.
+- **No consistent quality winner.**
+  - Internal evaluator: the edit arm won on 03 (92 vs 82); regeneration won on 10 (88 vs 80). On 06 both arms in fact regenerated, and they still differed by 2 points, which shows the variation between runs.
+  - Overlay judge: differences between arms were at most 3 points of adherence. Repeating the judge on four identical overlays varied by up to 3 points of adherence and 8 of coverage.
+  - Ink metrics: arms differed by at most 1.5 points. On 10 the judge rated the starting candidate highest, while the internal evaluator ranked it below the accepted regeneration.
+- **Cost profile.** The `drafter_choice` revision prompt always includes the saved model, so it used 1.5 to 2.0 times the input tokens of full regeneration. That includes 06, where the drafter then regenerated. Where it edited (03 and 10), it produced 22–45% fewer output tokens. Elapsed time was similar.
+
+One route per arm and drawing cannot rank the modes. The judge belongs to the same model family as the drafter and evaluator, so their errors may be correlated. The overlay is not metrology, and no output has human approval. A useful next comparison needs several routes per arm, more drawings, and either human review or an evaluator calibrated against known defects.
 
 ## Three Views, Four Methods
 

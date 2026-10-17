@@ -132,6 +132,9 @@ class ReportTests(unittest.TestCase):
                 (output / "overlays" / name).mkdir(parents=True)
                 (output / "overlays" / name / "overlay-metrics.json").write_text(json.dumps({"ink_precision": 0.8, "ink_recall": 0.4}))
                 (output / "overlays" / name / "overlay-judgment.json").write_text(json.dumps({"adherence_score": adherence, "coverage_score": 50, "assessment": "ok"}))
+            (output / "overlays" / "06-freecad-neka__start" / "overlay-judgment-repeat-1.json").write_text(json.dumps({
+                "adherence_score": 64, "coverage_score": 47, "assessment": "again", "calls": 1, "input_tokens": 10, "output_tokens": 5}))
+            (output / "overlays" / "06-freecad-neka__start" / "judge-error-0.json").write_text(json.dumps({"error": "HTTP 500"}))
             report(output)
             text = (output / "report.md").read_text(encoding="utf-8")
             self.assertIn("| 06-freecad-neka | start (seed) | attempt 1 |", text)
@@ -143,6 +146,8 @@ class ReportTests(unittest.TestCase):
             self.assertLess(table.index("| drafter_choice |"), table.index("| drafter_choice-rerun |"))
             self.assertLess(table.index("| drafter_choice-rerun |"), table.index("| full_regeneration |"))
             self.assertIn("Extra arm 06-freecad-neka / drafter_choice-rerun", text)
+            self.assertIn("| 06-freecad-neka/start | 60, 64 | 50, 47 | 4 | 3 |", text)
+            self.assertIn("plus 1 failed call(s) with unknown usage", text)
             self.assertTrue((output / "report.html").exists())
 
 

@@ -100,10 +100,19 @@ python .\scripts\mode_comparison.py add-arm work\mode-comparison-<id> --label <d
 python .\scripts\mode_comparison.py all work\mode-comparison-<id>
 ```
 
+To measure how much the overlay judge varies, run it again on unchanged outputs. The report then adds a repeatability table:
+
+```powershell
+python .\scripts\mode_comparison.py judge-repeat work\mode-comparison-<id> --row <row-id> --count 2
+python .\scripts\mode_comparison.py report work\mode-comparison-<id>
+```
+
+A first comparison covered three drawings with one route per arm. The drafter chose edits on two of them. It found no consistent quality difference between the modes: gaps between arms were within the judge's repeat variation. Results and caveats are in the [experiment guide](docs/public/experiments.md#matched-comparison-edit-versus-regeneration).
+
 See the [public experiment guide](docs/public/experiments.md) for prerequisites, configuration and scope. Model experiments require authorized inference configuration and can incur charges. Originals and prior revisions are preserved; CAD runs use isolated profiles, progress receipts and deadlines. Automatic mid-route crash recovery remains incomplete.
 
 ## Next Milestone
 
-Improve the evaluator, measure on matched seeds whether drafter-selected edits outperform full regeneration, and implement checkpoint recovery. Model requests dominate processing time; CAD execution is a small part of the measured total.
+Improve the evaluator by calibrating it against known defects. Repeat the edit-versus-regeneration comparison with several routes per arm, more drawings and human review. Implement checkpoint recovery. Model requests dominate processing time; CAD execution is a small part of the measured total.
 
 This public release contains code, documentation, supplied drawings authorized for publication, selected input/output examples and aggregate metrics. The separate private-originals folder, configurations and raw run artifacts remain local. Remote CAD hosting remains a roadmap, not a deployed service.
