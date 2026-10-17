@@ -233,5 +233,46 @@ class NativeWorkerTests(WorkerHarness):
                          json.loads((directory / "cad-2" / "edit-plan.json").read_text())["base_sha256"])
 
 
+def run_qcad_script(script, model, output, edit=None):
+    import subprocess
+    directory = output.parent
+    (directory / "model.json").write_text(json.dumps(model))
+    profile = directory / ("profile-" + output.stem)
+    profile.mkdir()
+    command = ["C:/Program Files/QCAD/qcadcmd.com", "-no-gui", "-allow-multiple-instances", "-config", str(profile), "-autostart", str(script),
+               "-model=" + str(directory / "model.json"), "-output=" + str(output)]
+    if edit is not None:
+        (directory / "edit-plan.json").write_text(json.dumps(edit))
+        command.append("-edit=" + str(directory / "edit-plan.json"))
+    completed = subprocess.run(command, capture_output=True, text=True, timeout=120, cwd="C:/Program Files/QCAD")
+    return json.loads(next(line for line in completed.stdout.splitlines() if line.startswith("CAD_AGENT_REPORT=")).split("=", 1)[1])
+
+
+@unittest.skipUnless(os.environ.get("CAD_AGENT_NATIVE_TESTS") == "1", "set CAD_AGENT_NATIVE_TESTS=1 to run real CAD edits")
+class NativeQcadPreservationTests(unittest.TestCase):
+    def test_preserved_rotated_hatch_survives_second_dxf_round_trip(self):
+        # DXF stores hatch angles in degrees; a -pi/2 hatch drifted by one ulp and was wrongly reported as changed.
+        hatch = {"id": "H1", "type": "hatch", "component": "Cut", "layer": "HATCH", "pattern": "ANSI31", "scale": 0.625,
+                 "angle": -1.5707963268, "loops": [[[0, 0], [20, 0], [20, 10], [0, 10]]], "area": 200}
+        outline = {"id": "P1", "type": "polyline", "component": "Cut", "layer": "OUTLINE", "points": [[0, 0], [20, 0], [20, 10], [0, 10]], "closed": True}
+        other = {"id": "L1", "type": "line", "component": "Other", "layer": "OUTLINE", "start": [30, 0], "end": [40, 0]}
+        script = ROOT / "scripts" / "qcad" / "restart_view.js"
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            base = run_qcad_script(script, {"native_qcad": True, "entities": [hatch, outline, other]}, directory / "base.dxf")
+            self.assertEqual(base["status"], "passed", base.get("error"))
+            moved = dict(other, id="L2", end=[45, 0])
+            edit = {"operations": [{"op": "replace", "component": "Other", "meaning": "longer", "entities": [moved]}],
+                    "preserved": ["Cut"], "base_native": str(directory / "base.dxf")}
+            edited = run_qcad_script(script, {"native_qcad": True, "entities": [hatch, outline, moved]}, directory / "edited.dxf", edit)
+            self.assertEqual(edited["status"], "passed", edited.get("error"))
+            self.assertTrue(edited["edit"]["preserved_verified"])
+            changed = dict(edit, operations=edit["operations"] + [{"op": "append", "component": "Cut", "meaning": "probe", "entities": [dict(other, id="L3", component="Cut")]}])
+            tampered = run_qcad_script(script, {"native_qcad": True, "entities": [hatch, outline, moved, dict(other, id="L3", component="Cut")]},
+                                       directory / "tampered.dxf", changed)
+            self.assertEqual(tampered["status"], "failed")
+            self.assertIn("Preserved component changed during native edit: Cut", tampered["error"])
+
+
 if __name__ == "__main__":
     unittest.main()

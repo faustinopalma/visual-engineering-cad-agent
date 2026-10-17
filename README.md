@@ -78,6 +78,28 @@ python .\scripts\quality_campaign.py worker <case>\freecad-neka --method freecad
 
 The worker expects the source view at `<case>\source\view.png` and `page.png`.
 
+`scripts\mode_comparison.py` runs a paired comparison. For each finished, unaccepted seed route it runs a `drafter_choice` arm and a `full_regeneration` arm from identical seeded copies, with the seed's configuration and the same `max_attempts`. Arms run one at a time and alternate order between seeds. Each validated output is then measured as follows:
+
+- **Overlay:** the reopened native geometry (FreeCAD `Document.xml` sketches, or QCAD readback) is drawn in red over the source view, using the pipeline's own pixel transform with no fitted alignment.
+- **Deterministic ink metrics:**
+  - ink precision is the share of CAD line pixels within 3 px of source ink;
+  - ink recall is the share of source ink near CAD lines.
+- **Overlay judge:** a stateless model call scores adherence and coverage. It sees only the source and the overlay, without arm, scores or history.
+- **Report:** `report.md` and `report.html` tabulate the start candidate and each arm's best new candidate, with token usage and images.
+
+This is relative evidence, not metrology or human approval.
+
+```powershell
+python .\scripts\mode_comparison.py all work\mode-comparison-<id> --seed-route <finished-route> [--seed-route <another>] --max-attempts 2
+```
+
+To rerun one arm after a fix without discarding the original arm, add an extra arm with its own code state and note, then rerun:
+
+```powershell
+python .\scripts\mode_comparison.py add-arm work\mode-comparison-<id> --label <drawing-backend> --mode drafter_choice --name drafter_choice-rerun --note "<reason>"
+python .\scripts\mode_comparison.py all work\mode-comparison-<id>
+```
+
 See the [public experiment guide](docs/public/experiments.md) for prerequisites, configuration and scope. Model experiments require authorized inference configuration and can incur charges. Originals and prior revisions are preserved; CAD runs use isolated profiles, progress receipts and deadlines. Automatic mid-route crash recovery remains incomplete.
 
 ## Next Milestone

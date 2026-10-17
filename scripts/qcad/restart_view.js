@@ -82,9 +82,39 @@ function describeAgentEntity(doc, entity, nativeQcad) {
 function agentBlockSignature(doc, name, nativeQcad) {
     var ids = doc.queryBlockEntities(doc.getBlockId(name));
     var values = [];
-    for (var index = 0; index < ids.length; ++index) { values.push(JSON.stringify(describeAgentEntity(doc, doc.queryEntity(ids[index]), nativeQcad))); }
-    values.sort();
-    return JSON.stringify(values);
+    for (var index = 0; index < ids.length; ++index) { values.push(describeAgentEntity(doc, doc.queryEntity(ids[index]), nativeQcad)); }
+    return values;
+}
+
+// DXF stores hatch angles in degrees, so a radian value can drift by one ulp per export/reimport.
+function sameAgentValue(first, second) {
+    if (typeof first === "number" && typeof second === "number") { return Math.abs(first - second) <= 1e-7; }
+    if (Array.isArray(first) || Array.isArray(second)) {
+        if (!Array.isArray(first) || !Array.isArray(second) || first.length !== second.length) { return false; }
+        for (var index = 0; index < first.length; ++index) { if (!sameAgentValue(first[index], second[index])) { return false; } }
+        return true;
+    }
+    if (first !== null && second !== null && typeof first === "object" && typeof second === "object") {
+        var keys = Object.keys(first).sort();
+        if (JSON.stringify(keys) !== JSON.stringify(Object.keys(second).sort())) { return false; }
+        for (var keyIndex = 0; keyIndex < keys.length; ++keyIndex) { if (!sameAgentValue(first[keys[keyIndex]], second[keys[keyIndex]])) { return false; } }
+        return true;
+    }
+    return first === second;
+}
+
+function sameAgentSignature(first, second) {
+    if (first.length !== second.length) { return false; }
+    var unmatched = second.slice();
+    for (var index = 0; index < first.length; ++index) {
+        var found = -1;
+        for (var candidate = 0; candidate < unmatched.length; ++candidate) {
+            if (sameAgentValue(first[index], unmatched[candidate])) { found = candidate; break; }
+        }
+        if (found < 0) { return false; }
+        unmatched.splice(found, 1);
+    }
+    return true;
 }
 
 function agentComponentBlocks(doc) {
@@ -222,7 +252,7 @@ function main() {
     var result = {status: "passed", reopened: true, entities: report, blocks: Object.keys(groups), review_status: "needs_review"};
     if (edit) {
         for (var preservedName in preserved) {
-            if (agentBlockSignature(reopened, preservedName, model.native_qcad) !== preserved[preservedName]) { throw new Error("Preserved component changed during native edit: " + preservedName); }
+            if (!sameAgentSignature(agentBlockSignature(reopened, preservedName, model.native_qcad), preserved[preservedName])) { throw new Error("Preserved component changed during native edit: " + preservedName); }
         }
         var operations = [];
         for (var operationIndex = 0; operationIndex < edit.operations.length; ++operationIndex) {
@@ -231,7 +261,7 @@ function main() {
         }
         result.edit = {base_native: edit.base_native, base_attempt: edit.base_attempt, operations: operations,
                        preserved_components: Object.keys(preserved).sort(), preserved_verified: true,
-                       evidence: "Preserved blocks compared after base import and after edited DXF export/reimport: entity type, coordinates, layer and hatch data."};
+                       evidence: "Preserved blocks compared after base import and after edited DXF export/reimport: entity type, coordinates, layer and hatch data, numeric tolerance 1e-7."};
     }
     reader.destroy();
     print("CAD_AGENT_REPORT=" + JSON.stringify(result));

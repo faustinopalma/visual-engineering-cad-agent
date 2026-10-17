@@ -283,6 +283,28 @@ def plan_comparison(output, seeds, max_attempts):
     return plan
 
 
+def arm_name(arm):
+    return arm.get("name", arm["mode"])
+
+
+def ordered_arms(plan, label):
+    arms = [arm for arm in plan["arms"] if arm["label"] == label]
+    return sorted(arms, key=lambda arm: (MODES.index(arm["mode"]), arm_name(arm) != arm["mode"], arm_name(arm)))
+
+
+def add_arm(output, label, mode, name, note):
+    """Append an extra arm (for example a rerun after a validator fix) without touching existing arms."""
+    plan = json.loads((output / "plan.json").read_text())
+    if any(arm["label"] == label and arm_name(arm) == name for arm in plan["arms"]) or name in MODES:
+        raise ValueError("Arm name already used: " + name)
+    template = next(arm for arm in plan["arms"] if arm["label"] == label and arm["mode"] == mode and arm_name(arm) == mode)
+    config = output / label / (name + ".config.json")
+    save(config, json.loads(Path(template["config"]).read_text()))
+    plan["arms"].append(dict(template, name=name, route=str(output / label / name), config=str(config), code=git_state(), note=note,
+                             added_unix_seconds=time.time()))
+    save(output / "plan.json", plan)
+
+
 def run(output, seeds, max_attempts):
     plan = json.loads((output / "plan.json").read_text()) if (output / "plan.json").exists() else plan_comparison(output, seeds, max_attempts)
     lock = ROOT / "work/.astra-campaign.lock"
@@ -295,9 +317,9 @@ def run(output, seeds, max_attempts):
                 continue
             if route.exists():
                 raise RuntimeError("Interrupted arm needs manual review before rerun (seeded route is not empty): " + str(route))
-            supervisor = route.parent / (arm["mode"] + "-supervisor")
+            supervisor = route.parent / (arm_name(arm) + "-supervisor")
             supervisor.mkdir(exist_ok=True)
-            print(json.dumps({"event": "arm_started", "label": arm["label"], "mode": arm["mode"]}), flush=True)
+            print(json.dumps({"event": "arm_started", "label": arm["label"], "arm": arm_name(arm)}), flush=True)
             command = [sys.executable, str(ROOT / "scripts/quality_campaign.py"), "worker", str(route), "--method", arm["method"],
                        "--config", arm["config"], "--seed-route", arm["seed"]]
             try:
@@ -307,7 +329,7 @@ def run(output, seeds, max_attempts):
                     route.mkdir(parents=True, exist_ok=True)
                     save(route / "result.json", {"method": arm["method"], "status": "supervisor_failed", "error": str(error),
                                                  "revision_mode": arm["mode"], "candidates": [], "usage_complete": False})
-            print(json.dumps({"event": "arm_finished", "label": arm["label"], "mode": arm["mode"]}), flush=True)
+            print(json.dumps({"event": "arm_finished", "label": arm["label"], "arm": arm_name(arm)}), flush=True)
     finally:
         lock.unlink()
 
@@ -317,7 +339,7 @@ def collect(output):
     plan = json.loads((output / "plan.json").read_text())
     rows = []
     for label in dict.fromkeys(arm["label"] for arm in plan["arms"]):
-        arms = [arm for arm in plan["arms"] if arm["label"] == label]
+        arms = ordered_arms(plan, label)
         seed = Path(arms[0]["seed"])
         seeded, _ = seeded_history(seed)
         scored = [item for item in seeded if item.get("score") is not None]
@@ -332,7 +354,7 @@ def collect(output):
             for candidate in result.get("candidates", []):
                 if candidate.get("seeded"):
                     continue
-                row = {"id": label + "/" + arm["mode"] + "/" + str(candidate["attempt"]), "label": label, "arm": arm["mode"],
+                row = {"id": label + "/" + arm_name(arm) + "/" + str(candidate["attempt"]), "label": label, "arm": arm_name(arm),
                        "attempt": candidate["attempt"], "mode": candidate.get("mode"), "base_attempt": candidate.get("base_attempt"),
                        "operations": candidate.get("operations"), "error": candidate.get("error")}
                 if candidate.get("cad"):
@@ -416,18 +438,19 @@ def report(output):
     results = {}
     for arm in plan["arms"]:
         route = Path(arm["route"])
-        results[(arm["label"], arm["mode"])] = json.loads((route / "result.json").read_text()) if (route / "result.json").exists() else {"status": "not_run"}
+        results[(arm["label"], arm_name(arm))] = json.loads((route / "result.json").read_text()) if (route / "result.json").exists() else {"status": "not_run"}
     summary = []
     for label in dict.fromkeys(arm["label"] for arm in plan["arms"]):
         start = next((row for row in rows if row["label"] == label and row["arm"] == "start"), None)
         if start:
             summary.append(dict(start, row_kind="start", decisions=["seed best (" + str(start["attempt"]) + ")"], result={}))
-        for mode in MODES:
-            result = results.get((label, mode), {"status": "not_run"})
-            new = [row for row in rows if row["label"] == label and row["arm"] == mode]
+        for arm in ordered_arms(plan, label):
+            name = arm_name(arm)
+            result = results.get((label, name), {"status": "not_run"})
+            new = [row for row in rows if row["label"] == label and row["arm"] == name]
             valid = [row for row in new if row.get("cad")]
             best = max(valid, key=lambda row: (row["internal_score"], row["attempt"])) if valid else None
-            entry = dict(best or {"label": label, "arm": mode, "metrics": {}, "judgment": {}, "images": None})
+            entry = dict(best or {"label": label, "arm": name, "metrics": {}, "judgment": {}, "images": None})
             entry.update(row_kind="arm", decisions=decisions(result), result=result, new_attempts=len(new), new_valid=len(valid))
             summary.append(entry)
     save(output / "comparison.json", {"plan": plan, "rows": [{key: (str(value) if isinstance(value, Path) else value) for key, value in row.items()} for row in rows]})
@@ -449,6 +472,10 @@ def report(output):
              "Ink precision = share of CAD line pixels within " + str(TOLERANCE_PX) + " px of source ink (adherence of what was drawn). Ink recall = share of source ink near CAD; source ink includes text, dimensions and title block that must be omitted, so recall compares outputs of the same drawing only.",
              "Overlay judge: stateless model call (" + json.loads((output / "judge.config.json").read_text())["deployment"] + ") seeing only the source view and the overlay, blind to arm and scores. Same provider as drafter/evaluator: errors may be correlated.",
              "Overlay uses the pipeline's own pixel transform (no fitted alignment). Relative evidence only: not metrology, not human approval. One route per arm and drawing is too few for statistical conclusions."]
+    for arm in plan["arms"]:
+        if arm.get("note"):
+            notes.append("Extra arm " + arm["label"] + " / " + arm_name(arm) + " (code " + arm["code"]["commit"][:7] + ("+dirty" if arm["code"]["dirty"] else "")
+                         + ", same seed and configuration as " + arm["mode"] + "): " + arm["note"])
     lines = ["# Edit-capable vs full-regeneration comparison", "", "Code: " + plan["code"]["branch"] + " @ " + plan["code"]["commit"][:7] + (" (uncommitted changes)" if plan["code"]["dirty"] else ""), "",
              "| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
     lines.extend("| " + " | ".join(cell.replace("|", "/") for cell in cells(entry)) + " |" for entry in summary)
@@ -487,12 +514,21 @@ def report(output):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("run", "overlay", "judge", "report", "all"))
+    parser.add_argument("action", choices=("run", "overlay", "judge", "report", "all", "add-arm"))
     parser.add_argument("directory", type=Path)
     parser.add_argument("--seed-route", type=Path, action="append", default=[])
     parser.add_argument("--max-attempts", type=int, default=2)
+    parser.add_argument("--label", help="add-arm: drawing/backend label from plan.json")
+    parser.add_argument("--mode", choices=MODES, help="add-arm: revision mode of the extra arm")
+    parser.add_argument("--name", help="add-arm: unique arm name, for example drafter_choice-rerun")
+    parser.add_argument("--note", help="add-arm: why the extra arm exists")
     arguments = parser.parse_args()
     directory = arguments.directory.resolve()
+    if arguments.action == "add-arm":
+        if not (arguments.label and arguments.mode and arguments.name and arguments.note):
+            parser.error("add-arm needs --label, --mode, --name and --note")
+        add_arm(directory, arguments.label, arguments.mode, arguments.name, arguments.note)
+        raise SystemExit(0)
     if arguments.action in ("run", "all"):
         if not (directory / "plan.json").exists() and not arguments.seed_route:
             parser.error("run needs at least one --seed-route for a new comparison")
