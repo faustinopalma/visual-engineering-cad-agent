@@ -573,9 +573,233 @@ def report(output):
     print(json.dumps({"report": str(output / "report.md"), "html": str(output / "report.html"), "rows": len(summary)}), flush=True)
 
 
+LAYER_COLORS = {("astra", "drafter_choice"): "#D55E00", ("astra", "full_regeneration"): "#0072B2",
+                ("sol", "drafter_choice"): "#CC79A7", ("sol", "full_regeneration"): "#009E73"}
+EXTRA_COLORS = ("#E69F00", "#56B4E9", "#000000", "#F0E442")
+MODE_TITLES = {"drafter_choice": "edit-capable", "full_regeneration": "from scratch"}
+
+
+def model_family(deployment):
+    text = (deployment or "").lower()
+    return "sol" if "sol" in text else "astra" if "astra" in text else text or "unknown"
+
+
+def svg_paths(geometry, height):
+    def points(line):
+        return [f"{x:.1f},{y:.1f}" for x, y in (to_pixel(point, height) for point in line)]
+    lines = "".join("M" + " L".join(points(line)) for line in geometry["polylines"] if len(line) > 1)
+    fills = ["".join("M" + " L".join(points(loop)) + "Z" for loop in fill) for fill in geometry["fills"]]
+    return lines, fills
+
+
+def viewer(output):
+    """Write viewer.html: the original view with one toggleable vector layer per route output, full window, zoom and pan."""
+    plan, rows = collect(output)
+    drawings = []
+    for label in dict.fromkeys(arm["label"] for arm in plan["arms"]):
+        with Image.open(output / label / "source" / "view.png") as image:
+            width, height = image.size
+        arms = ordered_arms(plan, label)
+        names = {arm_name(arm) for arm in arms}
+        main, extra = [], []
+        start = next((row for row in rows if row["label"] == label and row["arm"] == "start"), None)
+        for arm in [None] + arms:
+            name = "start" if arm is None else arm_name(arm)
+            valid = [row for row in rows if row["label"] == label and row["arm"] == name and row.get("cad")]
+            best = start if arm is None else (max(valid, key=lambda row: (row["internal_score"], row["attempt"])) if valid else None)
+            layer = {"name": name, "attempt": best and best["attempt"], "internal_score": best and best.get("internal_score"),
+                     "internal_accepted": bool(best and best.get("internal_accepted"))}
+            if arm is None:
+                layer.update(key="start", title="Starting candidate (common seed, attempt " + str(best["attempt"]) + ")" if best else "Starting candidate",
+                             detail="Best candidate of the original Astra route; every arm started from it.")
+            else:
+                family = model_family(json.loads(Path(arm["config"]).read_text()).get("deployment"))
+                result = json.loads((Path(arm["route"]) / "result.json").read_text()) if (Path(arm["route"]) / "result.json").exists() else {"status": "not_run"}
+                base = name[:-len("-rerun")] if name.endswith("-rerun") else name
+                superseded = name + "-rerun" in names
+                title = family.capitalize() + " · " + MODE_TITLES[arm["mode"]]
+                layer.update(key=name if superseded else family + "/" + arm["mode"], superseded=superseded, status=result.get("status"),
+                             title=title + (" (first run, superseded by rerun)" if superseded else ""),
+                             detail=("; ".join(decisions(result)) or "no new attempt") + (". " + arm["note"] if arm.get("note") and base != name else ""),
+                             calls=result.get("calls"), input_tokens=result.get("input_tokens"), output_tokens=result.get("output_tokens"),
+                             seconds=None if result.get("elapsed_seconds") is None else round(result["elapsed_seconds"]))
+            if best:
+                target = output / "overlays" / best["id"].replace("/", "__")
+                metrics = json.loads((target / "overlay-metrics.json").read_text()) if (target / "overlay-metrics.json").exists() else {}
+                judgment = json.loads((target / "overlay-judgment.json").read_text()) if (target / "overlay-judgment.json").exists() else {}
+                layer.update(ink_precision=metrics.get("ink_precision"), ink_recall=metrics.get("ink_recall"),
+                             judge_adherence=judgment.get("adherence_score"), judge_coverage=judgment.get("coverage_score"))
+                try:
+                    layer["lines"], layer["fills"] = svg_paths(native_geometry(best["cad"], best["compiled"]), height)
+                except Exception as error:
+                    layer["error"] = str(error)
+            else:
+                layer["error"] = "No valid new output in this route."
+            is_main = (arm is not None and not layer.get("superseded") and (family, arm["mode"]) in LAYER_COLORS
+                       and all(item["key"] != layer["key"] for item in main))
+            (main if is_main else extra).append(layer)
+        main.sort(key=lambda layer: list(LAYER_COLORS).index(tuple(layer["key"].split("/"))))
+        for layer in main:
+            layer.update(color=LAYER_COLORS[tuple(layer["key"].split("/"))], visible=True)
+        for index, layer in enumerate(extra):
+            layer.update(color=EXTRA_COLORS[index % len(EXTRA_COLORS)], visible=False)
+        drawings.append({"label": label, "image": label + "/source/view.png", "width": width, "height": height, "layers": main + extra})
+    data = {"drawings": drawings, "code": plan["code"], "max_attempts": plan["max_attempts"],
+            "notes": ["Each layer is the best new candidate of its route by internal evaluator score (the seed layer is the common start).",
+                      "All routes copied the same Astra seed and allowed " + str(plan["max_attempts"]) + " new attempts; Sol routes change only the drafter deployment, the evaluator stays Astra.",
+                      "Geometry is read back from the saved native documents and placed with the pipeline's own transform (no fitted alignment). Visual evidence only: not metrology, not human approval."]}
+    payload = json.dumps(data, separators=(",", ":")).replace("</", "<\\/")
+    (output / "viewer.html").write_text(VIEWER_HTML.replace("__DATA__", payload), encoding="utf-8")
+    print(json.dumps({"viewer": str(output / "viewer.html"), "layers": sum(len(item["layers"]) for item in drawings)}), flush=True)
+
+
+VIEWER_HTML = r"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Overlay viewer: original and reconstructions</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;font-family:"Segoe UI",Arial,sans-serif;color:#1b1f24;background:#fff}
+#stage{position:fixed;inset:0;cursor:grab;background:#fff}#stage.drag{cursor:grabbing}
+#canvas{position:absolute;left:0;top:0;transform-origin:0 0}#canvas img,#canvas svg{position:absolute;left:0;top:0;user-select:none;-webkit-user-drag:none}
+#panel{position:fixed;top:10px;left:10px;width:370px;max-height:calc(100vh - 20px);overflow:auto;background:rgba(255,255,255,.94);border:1px solid #c9d1d9;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.15);padding:10px 12px;font-size:13px}
+#panel.hidden{display:none}#show{position:fixed;top:10px;left:10px;display:none}#show.on{display:block}
+h1{font-size:15px;margin:0 0 8px}.tabs button{margin:0 4px 4px 0}.tabs button.active{background:#1b1f24;color:#fff}
+button{font:inherit;font-size:12px;padding:3px 8px;border:1px solid #9aa4ae;background:#f6f8fa;border-radius:4px;cursor:pointer}
+.layer{display:grid;grid-template-columns:20px 16px 1fr auto;gap:6px;align-items:start;padding:6px 0;border-top:1px solid #e4e8ec}
+.layer.disabled{opacity:.5}.swatch{width:14px;height:14px;border-radius:3px;margin-top:2px}.title{font-weight:600}
+.stats,.detail{color:#57606a;font-size:12px}.detail{margin-top:2px}.key{font-family:Consolas,monospace;color:#57606a}
+.row{display:flex;align-items:center;gap:8px;margin:6px 0}.row input[type=range]{flex:1}.notes{color:#57606a;font-size:11.5px;padding-left:16px;margin:6px 0 0}
+.accepted{color:#1a7f37;font-weight:600}
+</style></head><body>
+<div id="stage"><div id="canvas"><img id="source" alt="Original drawing view"><svg id="layers" xmlns="http://www.w3.org/2000/svg"></svg></div></div>
+<button id="show" title="Show panel (H)">Show panel (H)</button>
+<div id="panel">
+<h1>Original vs reconstructions</h1>
+<div class="tabs" id="tabs"></div>
+<div class="row"><label><input type="checkbox" id="original" checked> Original <span class="key">[0]</span></label><span>opacity</span><input type="range" id="opacity" min="0" max="100" value="55"></div>
+<div class="row"><span>CAD line width</span><input type="range" id="width" min="0.5" max="5" step="0.5" value="1.5"><span id="widthValue"></span></div>
+<div class="row"><button id="all">All layers</button><button id="none">No layers</button><button id="fit">Fit (F)</button><button id="hide">Hide panel (H)</button></div>
+<div id="list"></div>
+<ul class="notes" id="notes"></ul>
+<p class="stats">Keys: 0 original, 1-9 layers, ←/→ drawing, F fit, H panel, hold Space = original only. Wheel zooms at the cursor; drag pans; double-click fits.</p>
+</div>
+<script>
+const DATA = __DATA__;
+const stage = document.getElementById("stage"), canvas = document.getElementById("canvas"), source = document.getElementById("source"), svg = document.getElementById("layers");
+const NS = "http://www.w3.org/2000/svg";
+let current = 0, view = {s: 1, x: 0, y: 0}, lineWidth = 1.5, hold = false;
+const visible = {};
+function drawing() { return DATA.drawings[current]; }
+function pct(v) { return v == null ? "-" : (v * 100).toFixed(1) + "%"; }
+function val(v) { return v == null ? "-" : String(v); }
+function isOn(layer) { return layer.key in visible ? visible[layer.key] : layer.visible; }
+function apply() {
+  canvas.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.s})`;
+  for (const group of svg.querySelectorAll("g[data-key]")) group.setAttribute("stroke-width", lineWidth / view.s);
+}
+function fit() {
+  const d = drawing(), r = stage.getBoundingClientRect(), panel = document.getElementById("panel");
+  const left = !panel.classList.contains("hidden") && r.width - panel.offsetWidth > 500 ? panel.offsetWidth + 20 : 0;
+  view.s = Math.min((r.width - left) / d.width, r.height / d.height);
+  view.x = left + (r.width - left - d.width * view.s) / 2; view.y = (r.height - d.height * view.s) / 2; apply();
+}
+function refresh() {
+  const d = drawing();
+  source.style.display = document.getElementById("original").checked ? "" : "none";
+  source.style.opacity = document.getElementById("opacity").value / 100;
+  for (const layer of d.layers) {
+    const group = svg.querySelector(`g[data-key="${CSS.escape(layer.key)}"]`);
+    if (group) group.style.display = isOn(layer) && !hold ? "" : "none";
+    const box = document.querySelector(`input[data-key="${CSS.escape(layer.key)}"]`);
+    if (box) box.checked = isOn(layer);
+  }
+  document.getElementById("widthValue").textContent = lineWidth + " px";
+}
+function build() {
+  const d = drawing();
+  source.src = d.image; source.width = d.width; source.height = d.height;
+  svg.setAttribute("viewBox", `0 0 ${d.width} ${d.height}`); svg.setAttribute("width", d.width); svg.setAttribute("height", d.height);
+  svg.replaceChildren();
+  for (const layer of d.layers) {
+    if (!layer.lines && !layer.fills) continue;
+    const group = document.createElementNS(NS, "g");
+    group.dataset.key = layer.key; group.setAttribute("stroke", layer.color); group.setAttribute("fill", "none");
+    group.setAttribute("stroke-linecap", "round"); group.setAttribute("stroke-linejoin", "round");
+    for (const fill of layer.fills || []) {
+      const path = document.createElementNS(NS, "path"); path.setAttribute("d", fill); path.setAttribute("fill", layer.color);
+      path.setAttribute("fill-opacity", "0.18"); path.setAttribute("fill-rule", "evenodd"); path.setAttribute("stroke", "none"); group.appendChild(path);
+    }
+    const path = document.createElementNS(NS, "path"); path.setAttribute("d", layer.lines || ""); group.appendChild(path);
+    svg.appendChild(group);
+  }
+  document.getElementById("tabs").replaceChildren(...DATA.drawings.map((item, index) => {
+    const button = document.createElement("button"); button.textContent = item.label; button.className = index === current ? "active" : "";
+    button.onclick = () => { current = index; build(); fit(); }; return button;
+  }));
+  const list = document.getElementById("list"); list.replaceChildren();
+  d.layers.forEach((layer, index) => {
+    const row = document.createElement("div"); row.className = "layer" + (layer.error ? " disabled" : "");
+    const box = document.createElement("input"); box.type = "checkbox"; box.dataset.key = layer.key; box.disabled = !!layer.error;
+    box.onchange = () => { visible[layer.key] = box.checked; refresh(); };
+    const swatch = document.createElement("div"); swatch.className = "swatch"; swatch.style.background = layer.color;
+    const text = document.createElement("div");
+    const accepted = layer.internal_accepted ? ' <span class="accepted">internally accepted</span>' : "";
+    text.innerHTML = `<div class="title"></div><div class="stats">attempt ${val(layer.attempt)} · internal ${val(layer.internal_score)}${accepted}<br>judge adherence/coverage ${val(layer.judge_adherence)}/${val(layer.judge_coverage)} · ink precision/recall ${pct(layer.ink_precision)}/${pct(layer.ink_recall)}`
+      + (layer.calls != null ? `<br>${layer.calls} calls · ${val(layer.input_tokens)} in / ${val(layer.output_tokens)} out tokens · ${val(layer.seconds)} s` : "") + `</div><div class="detail"></div>`;
+    text.querySelector(".title").textContent = layer.title;
+    text.querySelector(".detail").textContent = layer.error ? layer.error : layer.detail;
+    const actions = document.createElement("div");
+    const key = document.createElement("span"); key.className = "key"; key.textContent = index < 9 ? `[${index + 1}] ` : "";
+    const solo = document.createElement("button"); solo.textContent = "only"; solo.disabled = !!layer.error; solo.title = "Original plus this layer only";
+    solo.onclick = () => { for (const other of d.layers) visible[other.key] = other.key === layer.key; document.getElementById("original").checked = true; refresh(); };
+    actions.append(key, solo);
+    row.append(box, swatch, text, actions); list.appendChild(row);
+  });
+  document.getElementById("notes").replaceChildren(...DATA.notes.map(note => { const item = document.createElement("li"); item.textContent = note; return item; }));
+  refresh();
+}
+function setAll(on) { for (const layer of drawing().layers) visible[layer.key] = on; refresh(); }
+function togglePanel() { document.getElementById("panel").classList.toggle("hidden"); document.getElementById("show").classList.toggle("on"); fit(); }
+document.getElementById("all").onclick = () => setAll(true);
+document.getElementById("none").onclick = () => setAll(false);
+document.getElementById("fit").onclick = fit;
+document.getElementById("hide").onclick = togglePanel;
+document.getElementById("show").onclick = togglePanel;
+document.getElementById("original").onchange = refresh;
+document.getElementById("opacity").oninput = refresh;
+document.getElementById("width").oninput = event => { lineWidth = Number(event.target.value); apply(); refresh(); };
+stage.addEventListener("wheel", event => {
+  event.preventDefault();
+  const k = Math.exp(-event.deltaY * 0.0015), r = stage.getBoundingClientRect(), mx = event.clientX - r.left, my = event.clientY - r.top;
+  view.x = mx - (mx - view.x) * k; view.y = my - (my - view.y) * k; view.s *= k; apply();
+}, {passive: false});
+let drag = null;
+stage.addEventListener("pointerdown", event => { drag = {x: event.clientX - view.x, y: event.clientY - view.y}; stage.classList.add("drag"); stage.setPointerCapture(event.pointerId); });
+stage.addEventListener("pointermove", event => { if (drag) { view.x = event.clientX - drag.x; view.y = event.clientY - drag.y; apply(); } });
+stage.addEventListener("pointerup", () => { drag = null; stage.classList.remove("drag"); });
+stage.addEventListener("dblclick", fit);
+window.addEventListener("resize", fit);
+window.addEventListener("keydown", event => {
+  if (event.target.tagName === "INPUT" && event.target.type === "range") return;
+  const layers = drawing().layers;
+  if (event.key === "0") { const box = document.getElementById("original"); box.checked = !box.checked; refresh(); }
+  else if (/^[1-9]$/.test(event.key) && layers[Number(event.key) - 1] && !layers[Number(event.key) - 1].error) { const layer = layers[Number(event.key) - 1]; visible[layer.key] = !isOn(layer); refresh(); }
+  else if (event.key === "ArrowRight" || event.key === "ArrowLeft") { current = (current + (event.key === "ArrowRight" ? 1 : DATA.drawings.length - 1)) % DATA.drawings.length; build(); fit(); }
+  else if (event.key === "f" || event.key === "F") fit();
+  else if (event.key === "h" || event.key === "H") togglePanel();
+  else if (event.key === " " && !hold) { hold = true; event.preventDefault(); refresh(); }
+});
+window.addEventListener("keyup", event => { if (event.key === " ") { hold = false; refresh(); } });
+const params = new URLSearchParams(location.hash.slice(1));
+if (params.has("drawing")) current = Math.max(0, Math.min(DATA.drawings.length - 1, Number(params.get("drawing")) || 0));
+if (params.get("panel") === "0") { document.getElementById("panel").classList.add("hidden"); document.getElementById("show").classList.add("on"); }
+build(); source.onload = fit; fit();
+</script></body></html>
+"""
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("run", "overlay", "judge", "report", "all", "add-arm", "judge-repeat"))
+    parser.add_argument("action", choices=("run", "overlay", "judge", "report", "viewer", "all", "add-arm", "judge-repeat"))
     parser.add_argument("directory", type=Path)
     parser.add_argument("--seed-route", type=Path, action="append", default=[])
     parser.add_argument("--max-attempts", type=int, default=2)
@@ -608,3 +832,5 @@ if __name__ == "__main__":
         judge(directory)
     if arguments.action in ("report", "all"):
         report(directory)
+    if arguments.action in ("viewer", "all"):
+        viewer(directory)

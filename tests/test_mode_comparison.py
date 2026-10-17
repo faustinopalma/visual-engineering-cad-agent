@@ -156,6 +156,24 @@ class ReportTests(unittest.TestCase):
             self.assertIn("| 06-freecad-neka/start | 60, 64 | 50, 47 | 4 | 3 |", text)
             self.assertIn("plus 1 failed call(s) with unknown usage", text)
             self.assertTrue((output / "report.html").exists())
+            Image.new("RGB", (400, 300), "white").save(output / "06-freecad-neka" / "source" / "view.png")
+            geometry = {"polylines": [[(10, 10), (50, 10)]], "fills": [], "counts": {}, "source": "synthetic"}
+            original = mode_comparison.native_geometry
+            mode_comparison.native_geometry = lambda cad, compiled: geometry
+            try:
+                mode_comparison.viewer(output)
+            finally:
+                mode_comparison.native_geometry = original
+            page = (output / "viewer.html").read_text(encoding="utf-8")
+            data = json.loads(page.split("const DATA = ", 1)[1].split(";\n", 1)[0])
+            layers = {layer["key"]: layer for layer in data["drawings"][0]["layers"]}
+            self.assertEqual(data["drawings"][0]["image"], "06-freecad-neka/source/view.png")
+            self.assertEqual(layers["start"]["lines"], "M40.0,260.0 L200.0,260.0")
+            self.assertFalse(layers["start"]["visible"])
+            self.assertEqual(layers["drafter_choice"]["attempt"], 2)
+            self.assertTrue(layers["drafter_choice"]["superseded"])
+            self.assertEqual(layers["unknown/drafter_choice"]["attempt"], 2)
+            self.assertEqual(layers["sol/full_regeneration"]["error"], "No valid new output in this route.")
 
 
 if __name__ == "__main__":

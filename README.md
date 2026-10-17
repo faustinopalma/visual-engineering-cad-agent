@@ -107,6 +107,18 @@ python .\scripts\mode_comparison.py judge-repeat work\mode-comparison-<id> --row
 python .\scripts\mode_comparison.py report work\mode-comparison-<id>
 ```
 
+To compare one drafter model with another from the same seed, add arms that take only the drafter deployment and model version from another configuration. The evaluator, limits and attempt budget stay those of the template arm:
+
+```powershell
+python .\scripts\mode_comparison.py add-arm work\mode-comparison-<id> --label <drawing-backend> --mode full_regeneration --name sol-full_regeneration --drafter-config <sol-route>\config.json --note "<reason>"
+```
+
+`viewer` (also run by `all`) writes `viewer.html` beside the report. It is a full-window page showing the original view with one toggleable vector layer per route output. Each layer is the route's best new candidate, read back from the saved native document. The page supports zoom, pan, isolating a single layer and an adjustable original opacity:
+
+```powershell
+python .\scripts\mode_comparison.py viewer work\mode-comparison-<id>
+```
+
 A first comparison covered three drawings with one route per arm. The drafter chose edits on two of them. It found no consistent quality difference between the modes: gaps between arms were within the judge's repeat variation. Results and caveats are in the [experiment guide](docs/public/experiments.md#matched-comparison-edit-versus-regeneration).
 
 See the [public experiment guide](docs/public/experiments.md) for prerequisites, configuration and scope. Model experiments require authorized inference configuration and can incur charges. Originals and prior revisions are preserved; CAD runs use isolated profiles, progress receipts and deadlines. Automatic mid-route crash recovery remains incomplete.
