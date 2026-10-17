@@ -122,7 +122,7 @@ def run(output):
         lock.unlink()
 
 
-TRANSPORT_ERRORS = ("10054", "timed out", "Connection", "connection", "RemoteDisconnected", "IncompleteRead")
+TRANSPORT_ERRORS = ("10054", "timed out", "Connection", "connection", "RemoteDisconnected", "IncompleteRead", "Inference HTTP 5")
 
 
 def retry_failed(output, limit=1):
@@ -291,7 +291,7 @@ def report(output):
     judged = [load(overlay_dir(output, cad) / "overlay-judgment.json") for cad in finals(output, entries)]
     judged = [item for item in judged if item]
     failures = sum(len(list(overlay_dir(output, cad).glob("*error-*.json"))) for cad in finals(output, entries) if overlay_dir(output, cad).exists())
-    notes = [plan["protocol"],
+    notes = [plan["protocol"]] + plan.get("amendments", []) + [
              "Final output = best evaluated candidate of the whole route (base plus arm) by internal score; 'base attempt' means the arm did not improve on the shared base.",
              "Route calls, tokens and seconds include the shared base route, so each arm shows the full cost of producing its final output; base rows show the base alone.",
              "Ink precision = share of CAD line pixels within 3 px of source ink; ink recall = share of source ink near CAD lines. Source ink includes text, dimensions, title block and hatching, so recall compares outputs of the same drawing. QCAD hatch fills are not counted as lines.",
@@ -299,7 +299,7 @@ def report(output):
              "One route per cell; differences of a few points are within observed judge and route variation. Internal acceptance is not human approval; no USD cost verified."]
     retries = load(output / "retries.json", [])
     if retries:
-        notes.append("Transport retries: " + str(len(retries)) + " route run(s) failed on the network (connection reset or read timeout) or were seeded from such a base; they were preserved as *.transport-failed-N and rerun once with the same configuration: "
+        notes.append("Transport retries: " + str(len(retries)) + " route run(s) failed on the network or service (connection reset, read timeout, HTTP 5xx), were interrupted to switch transport, or were seeded from such a base; they were preserved as *.transport-failed-N / *.interrupted-N and rerun once with the same configuration: "
                      + ", ".join(item["route"] for item in retries) + ". Their partial usage (" + fmt(sum(item.get("input_tokens") or 0 for item in retries)) + " input / "
                      + fmt(sum(item.get("output_tokens") or 0 for item in retries)) + " output tokens recorded, more unknown) is not included in route costs.")
     for entry in entries:

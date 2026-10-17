@@ -1,8 +1,10 @@
 import base64
+import http.client
 import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import time
 import urllib.error
@@ -10,6 +12,60 @@ import urllib.request
 
 
 ROOT = Path(__file__).resolve().parents[1]
+RESPONSE_LIMIT = 16 * 1024 * 1024
+
+
+class KeepAliveHTTPSConnection(http.client.HTTPSConnection):
+    """Enable TCP keepalive so long silent model reasoning does not look like an idle connection to network middleboxes."""
+    def connect(self):
+        super().connect()
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        if hasattr(socket, "SIO_KEEPALIVE_VALS"):
+            self.sock.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 30000, 10000))
+        elif hasattr(socket, "TCP_KEEPIDLE"):
+            self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 30)
+            self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 10)
+
+
+class KeepAliveHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, request):
+        return self.do_open(KeepAliveHTTPSConnection, request)
+
+
+OPENER = urllib.request.build_opener(KeepAliveHTTPSHandler())
+
+
+def read_stream(lines, limit=RESPONSE_LIMIT):
+    """Parse a Responses API server-sent event stream; return the final response object, streamed text and timing."""
+    result, texts, data, size, events, gap = None, [], [], 0, 0, 0.0
+    last = time.monotonic()
+    for raw in lines:
+        now = time.monotonic()
+        gap, last = max(gap, now - last), now
+        size += len(raw)
+        if size > limit:
+            raise RuntimeError("Model stream exceeded the response size limit.")
+        line = raw.decode("utf-8").rstrip("\r\n")
+        if line.startswith("data:"):
+            data.append(line[5:].lstrip())
+            continue
+        if line or not data:
+            continue
+        payload, data = "\n".join(data), []
+        if payload == "[DONE]":
+            break
+        event = json.loads(payload)
+        events += 1
+        kind = event.get("type")
+        if kind == "response.output_text.delta":
+            texts.append(event.get("delta", ""))
+        elif kind in ("response.completed", "response.incomplete", "response.failed"):
+            result = event.get("response")
+        elif kind == "error":
+            raise RuntimeError("Inference stream error: " + str(event.get("message") or (event.get("error") or {}).get("message") or event.get("code")))
+    if result is None:
+        raise ConnectionError("Model stream ended before a final response event.")
+    return result, "".join(texts), {"events": events, "bytes": size, "max_gap_seconds": round(gap, 1)}
 
 
 class AstraClient:
@@ -63,6 +119,9 @@ class AstraClient:
                         "input": [{"role": "user", "content": content}]}
         if schema:
             request_body["text"] = {"format": {"type": "json_schema", "name": "cad_result", "strict": True, "schema": schema}}
+        streaming = self.config.get("stream", True)
+        if streaming:
+            request_body["stream"] = True
         payload = json.dumps(request_body).encode("utf-8")
         request = urllib.request.Request(self.config["endpoint"], data=payload,
                                         headers={"Authorization": "Bearer " + self.token, "Content-Type": "application/json"})
@@ -73,10 +132,14 @@ class AstraClient:
         pending = self.output / "pending-request.json"
         pending.write_text(json.dumps(dict(entry, status="waiting_for_response"), indent=2), encoding="utf-8")
         try:
-            with urllib.request.urlopen(request, timeout=self.config["request_timeout_seconds"]) as response:
-                body = response.read(16 * 1024 * 1024)
-                result = json.loads(body)
+            with OPENER.open(request, timeout=self.config["request_timeout_seconds"]) as response:
                 entry["request_id"] = response.headers.get("x-request-id") or response.headers.get("apim-request-id")
+                if streaming:
+                    result, streamed, entry["stream"] = read_stream(response)
+                    body = json.dumps(result).encode("utf-8")
+                else:
+                    body = response.read(RESPONSE_LIMIT)
+                    result, streamed = json.loads(body), ""
             entry.update(status=result.get("status"), response_id=result.get("id"), usage=result.get("usage"), response_bytes=len(body))
             self.total_tokens += (result.get("usage") or {}).get("total_tokens", 0)
             (self.output / (phase + "-response.json")).write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
@@ -84,6 +147,8 @@ class AstraClient:
                 raise RuntimeError("Model response incomplete or blocked; see response metadata.")
             texts = [item["text"] for output in result.get("output", []) if output.get("type") == "message"
                      for item in output.get("content", []) if item.get("type") == "output_text"]
+            if not texts and streamed:
+                texts = [streamed]
             if not texts:
                 raise RuntimeError("Model returned no JSON text.")
             value = json.loads("".join(texts))
@@ -95,7 +160,7 @@ class AstraClient:
                 self.token = None
                 self.token_expires_at = 0
             raise RuntimeError("Inference HTTP " + str(error.code) + ": " + str(detail.get("error", {}).get("message", "request failed"))) from None
-        except (TimeoutError, urllib.error.URLError) as error:
+        except (TimeoutError, urllib.error.URLError, OSError, http.client.HTTPException) as error:
             entry.update(status="transport_error", error_type=type(error).__name__, usage=None,
                          usage_status="unknown: request may have been processed; no automatic replay")
             raise

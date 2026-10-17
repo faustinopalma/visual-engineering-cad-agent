@@ -126,5 +126,20 @@ class MatrixTests(unittest.TestCase):
             self.assertEqual(matrix_comparison.retry_failed(output), [])
 
 
+class StreamTests(unittest.TestCase):
+    def test_read_stream_returns_final_response_and_text(self):
+        from astra_client import read_stream
+        final = {"id": "r1", "status": "completed", "output": [], "usage": {"total_tokens": 5}}
+        events = [{"type": "response.created"}, {"type": "response.output_text.delta", "delta": "{\"a\":"},
+                  {"type": "response.output_text.delta", "delta": "1}"}, {"type": "response.completed", "response": final}]
+        lines = [line for event in events for line in (b"event: x\n", b"data: " + json.dumps(event).encode() + b"\n", b"\n")]
+        result, text, timing = read_stream(lines)
+        self.assertEqual((result, text, timing["events"]), (final, "{\"a\":1}", 4))
+        with self.assertRaises(ConnectionError):
+            read_stream(lines[:6])
+        with self.assertRaises(RuntimeError):
+            read_stream([b"data: {\"type\": \"error\", \"message\": \"overloaded\"}\n", b"\n"])
+
+
 if __name__ == "__main__":
     unittest.main()
