@@ -121,6 +121,29 @@ python .\scripts\mode_comparison.py viewer work\mode-comparison-<id>
 
 A first comparison covered three drawings with one route per arm. The drafter chose edits on two of them. It found no consistent quality difference between the modes: gaps between arms were within the judge's repeat variation. Results and caveats are in the [experiment guide](docs/public/experiments.md#matched-comparison-edit-versus-regeneration).
 
+`scripts\matrix_comparison.py` crosses drawings, CAD backends (FreeCAD through the Neka MCP, and native QCAD), drafter models and the two revision strategies. For each drawing, backend and model it works as follows:
+
+- One base route starts from the raw source and runs analysis, a first generation and evaluation (`--base-attempts`, default 1).
+- Both strategy arms copy that base and add the same attempts (`--arm-attempts`, default 2).
+- Each arm's final output is the best evaluated candidate of the whole route. Route costs include the shared base.
+
+The evaluator and overlay judge use one deployment for every route. FreeCAD has no hatch entity, so its drafter is told not to draw hatching, and its evaluator and the judge are told not to penalize the omission. This rule is enforced through prompts only.
+
+```powershell
+python .\scripts\matrix_comparison.py plan work\matrix-<id> --source <case>\source [--source <another>] --model astra=<astra-config.json> --model sol=<sol-config.json>
+python .\scripts\matrix_comparison.py all work\matrix-<id>
+```
+
+`all` runs pending routes sequentially, then overlays, judge, report and viewer. The viewer has one page per drawing:
+
+- one colored layer per backend, model and strategy;
+- dashed shared-base layers, off by default;
+- tag filters to isolate a backend, model or strategy.
+
+When a route fails on the network or service (connection reset, read timeout, HTTP 5xx), `retry-failed` preserves it and any arm seeded from it as `*.transport-failed-N`, records the event in `retries.json`, and lets `all` rerun it once.
+
+Model requests are streamed and use TCP keepalive. Earlier non-streaming requests that took more than about five minutes were often dropped.
+
 See the [public experiment guide](docs/public/experiments.md) for prerequisites, configuration and scope. Model experiments require authorized inference configuration and can incur charges. Originals and prior revisions are preserved; CAD runs use isolated profiles, progress receipts and deadlines. Automatic mid-route crash recovery remains incomplete.
 
 ## Next Milestone

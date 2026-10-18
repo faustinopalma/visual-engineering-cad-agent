@@ -63,6 +63,44 @@ The table reports the arm's best new candidate by internal score. Tokens and sec
 
 One route per arm and drawing cannot rank the modes. The judge belongs to the same model family as the drafter and evaluator, so their errors may be correlated. The overlay is not metrology, and no output has human approval. A useful next comparison needs several routes per arm, more drawings, and either human review or an evaluator calibrated against known defects.
 
+## Matrix: Backend, Drafter Model and Strategy
+
+`scripts/matrix_comparison.py` then crossed four factors: the same three drawings (06, 03, 10), two backends (FreeCAD through the Neka MCP bridge, and native QCAD), two drafter deployments (Astra and Sol), and the two revision strategies. That makes 24 final outputs.
+
+**Protocol.**
+- For each drawing, backend and drafter model, one base route generates a single attempt from the raw source.
+- Both strategy arms copy that base and add two attempts each.
+- The final output is the best evaluated candidate of base plus arm, ranked by internal score. Route cost includes the shared base.
+- Everything else was held equal: the evaluator, the overlay judge (both Astra), high reasoning effort and the limits. Routes ran one at a time, and strategy order alternated.
+- FreeCAD has no native hatch entity. Its drafter was therefore told to omit hatching and never to imitate it with lines, and its evaluator and judge were told not to penalize the omission. Rendering the reopened FreeCAD geometry for drawing 10 alone confirmed that no imitation hatching was drawn.
+
+| Group | Internally accepted | Mean internal | Judge adherence / coverage | Ink precision | Input / output tokens | Seconds |
+|---|---:|---:|---:|---:|---:|---:|
+| FreeCAD | 7 / 12 | 84.7 | 88.4 / 88.8 | 77.1% | 376,379 / 614,602 | 18,379 |
+| QCAD | 3 / 12 | 81.4 | 87.4 / 86.1 | 74.9% | 569,949 / 862,726 | 20,540 |
+| Astra drafter | 7 / 12 | 84.9 | 88.5 / 87.7 | 78.4% | 434,389 / 729,641 | 17,366 |
+| Sol drafter | 3 / 12 | 81.2 | 87.3 / 87.2 | 73.5% | 511,939 / 747,687 | 21,553 |
+| Edit-capable | 5 / 12 | 83.0 | 88.0 / 87.6 | 76.1% | 496,951 / 692,872 | 19,101 |
+| From scratch | 5 / 12 | 83.1 | 87.8 / 87.3 | 75.9% | 449,377 / 784,456 | 19,818 |
+
+Tokens and seconds are route totals for drafter and evaluator, including the shared base for each arm. The overlay judge used 32 further successful calls (66,060 input / 105,273 output tokens). Dollar costs were not verified.
+
+**What the matrix shows:**
+- **Strategy.** Edit-capable and from-scratch arms tied: 5 of 12 accepted each, with mean scores within 0.3 points. The edit-capable arms used about 10% more input tokens and 12% fewer output tokens.
+- **Drafter model.** Astra did better than Sol on every aggregate: acceptance, internal score and ink precision. Sol was also slower, by about 24%.
+- **Backend.** FreeCAD was accepted more often than QCAD and scored higher internally. This is not a like-for-like comparison, though: QCAD outputs were also judged on hatching, which FreeCAD skips.
+
+The full report holds a per-drawing FreeCAD versus QCAD table, every route, and a full-page viewer. The viewer lets you overlay the source and all 12 layers per drawing (4 bases plus 8 arms), toggle each one, and filter by backend, model or strategy.
+
+**Disclosed deviations.**
+- *Transport switch mid-run.* After 15 of 36 routes, about one in three non-streaming model requests was dropped at around 300 s or timed out at 900 s. The client was switched to streamed responses with TCP keepalive. Prompts, models and limits were unchanged.
+  - Routes completed before the switch were kept.
+  - Eight failed or interrupted routes were preserved and rerun once. Their partial token usage is excluded from route costs.
+  - After the switch, no request failed on transport.
+- *Lost FreeCAD bases.* Two Astra FreeCAD bases (drawings 03 and 10) produced no candidate. The cause was that the MCP bridge timed out waiting for FreeCAD to connect, an infrastructure failure rather than a model one. Their arms therefore had one attempt fewer. On drawing 03 this also meant the edit-capable arm had nothing to edit.
+
+With one route per cell and correlated same-provider judging, these differences are indications, not rankings. The overlay is not metrology, and no output has human approval.
+
 ## Three Views, Four Methods
 
 Twelve independent interpretations used QCAD, direct FreeCAD, Neka MCP and Robust MCP. All constructed native files passed persistence checks. The internal evaluator accepted all final candidates, including a corrected second Robust candidate. Independent visual review nevertheless found incorrectly scalloped nut envelopes with high scores. The evaluator can be overconfident; these scores are not a reliable ranking of mechanical correctness.

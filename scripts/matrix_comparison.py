@@ -304,7 +304,12 @@ def report(output):
                      + fmt(sum(item.get("output_tokens") or 0 for item in retries)) + " output tokens recorded, more unknown) is not included in route costs.")
     for entry in entries:
         if entry["kind"] == "base" and not entry["final"]:
-            notes.append("Base " + entry["id"] + " produced no evaluated candidate (" + str(entry["result"].get("status")) + ": " + str(entry["result"].get("error", "-"))[:120]
+            cause = str(entry["result"].get("error") or next((str(item.get("error")) for item in entry["result"].get("candidates", []) if item.get("error")), "-"))
+            cause = cause.split(" Repair the structured model")[0].rstrip(". ")[:240]
+            stderr = Path(entry["dir"]) / "cad-1" / "mcp-stderr.log"
+            if stderr.exists() and "TimeoutError" in stderr.read_text(errors="replace"):
+                cause += "; the FreeCAD MCP bridge timed out waiting for FreeCAD to connect, an infrastructure failure rather than model output"
+            notes.append("Base " + entry["id"] + " produced no evaluated candidate (" + str(entry["result"].get("status")) + ": " + cause
                          + "). Its arms continued from the shared analysis with only their own attempts, one fewer than other cells.")
     if judged:
         notes.append("Overlay judge usage: " + str(sum(item.get("calls", 0) for item in judged)) + " successful calls, " + str(sum(item.get("input_tokens", 0) for item in judged))
