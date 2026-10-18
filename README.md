@@ -4,6 +4,28 @@ An experimental converter from drawing images and PDFs to editable CAD. A model 
 
 **FreeCAD and QCAD both remain under development.** Local conversion and evaluation loops are implemented; dependable unattended conversion and remote jobs are not yet established. The [evolving plan](EVOLVING_CAD_AGENT_PLAN.md) records current capabilities and next decisions.
 
+## Featured Results
+
+Both drawings below were finished by the drafter **editing its own saved candidate** rather than redrawing it from scratch: it replaced a few components and kept the verified ones. Each was internally accepted, saved and reopened. The overlay draws the reconstruction over the original scan.
+
+**Gear housing section: QCAD, Astra, two edits.** Native section hatches; internal score 91, judge adherence 87 and coverage 91.
+
+<table><tr>
+<td width="33%"><a href="site/assets/drawing-03-input.png"><img src="site/assets/drawing-03-input.png" alt="Original scan of drawing 03"></a><br>Original scan</td>
+<td width="33%"><a href="site/assets/drawing-03-qcad-edit-output.png"><img src="site/assets/drawing-03-qcad-edit-output.png" alt="QCAD reconstruction of drawing 03"></a><br>Editable CAD (<a href="site/assets/drawing-03-qcad-edit.dxf">DXF</a>)</td>
+<td width="33%"><a href="site/assets/drawing-03-qcad-edit-overlay.png"><img src="site/assets/drawing-03-qcad-edit-overlay.png" alt="Reconstruction over the scan of drawing 03"></a><br>Overlay on the scan</td>
+</tr></table>
+
+**Motor and screw jack, two views: FreeCAD, Astra, one edit.** 6 components replaced and 14 preserved; no hatching, because FreeCAD has no hatch entity. Internal score 88, judge adherence 90 and coverage 89.
+
+<table><tr>
+<td width="33%"><a href="site/assets/drawing-06-input.png"><img src="site/assets/drawing-06-input.png" alt="Original scan of drawing 06"></a><br>Original scan</td>
+<td width="33%"><a href="site/assets/drawing-06-freecad-edit-output.png"><img src="site/assets/drawing-06-freecad-edit-output.png" alt="FreeCAD reconstruction of drawing 06"></a><br>Editable CAD (<a href="site/assets/drawing-06-freecad-edit.FCStd">FCStd</a>)</td>
+<td width="33%"><a href="site/assets/drawing-06-freecad-edit-overlay.png"><img src="site/assets/drawing-06-freecad-edit-overlay.png" alt="Reconstruction over the scan of drawing 06"></a><br>Overlay on the scan</td>
+</tr></table>
+
+These come from a 24-output matrix (3 drawings × FreeCAD/QCAD × Astra/Sol × edit-capable/from scratch). The [overlay viewer](https://faustinopalma.github.io/visual-engineering-cad-agent/matrix-viewer.html) lets you toggle the original and every version per drawing at full page. Scores come from the automatic evaluator and a blind overlay judge, not from human dimensional approval.
+
 ## Architecture
 
 ```text
@@ -40,8 +62,9 @@ Both remain active candidates. Selection will depend on quality, editability, re
 
 ## Feasibility Examples
 
-Open the site's [input/output examples](https://faustinopalma.github.io/visual-engineering-cad-agent/examples.html) for actual drawing reconstructions and downloadable DXF files. The home page shows the degraded assembly drawing and its reconstructed three-view CAD output.
+Open the site's [input/output examples](https://faustinopalma.github.io/visual-engineering-cad-agent/examples.html) for actual drawing reconstructions and downloadable native files. The home page shows the degraded assembly drawing and its reconstructed three-view CAD output.
 
+- [Gear housing section](site/assets/drawing-03-qcad-edit-output.png) and [motor and screw jack](site/assets/drawing-06-freecad-edit-output.png), shown above, were finished by drafter edits.
 - [Mechanical assembly reconstruction](site/assets/drawing-05-output.png) includes three views, a section with native hatches, internal passages and fittings.
 - [Section and plan reconstruction](site/assets/drawing-01-output.png) includes a housing, passages, concentric details and mounting holes.
 - [Turned component reconstruction](site/assets/drawing-07-output.png) includes a stepped profile and knurled band.
@@ -144,10 +167,25 @@ When a route fails on the network or service (connection reset, read timeout, HT
 
 Model requests are streamed and use TCP keepalive. Earlier non-streaming requests that took more than about five minutes were often dropped.
 
+The first matrix covered drawings 06, 03 and 10: 24 outputs, one route per cell.
+- **Strategy:** overall a tie, 5 of 12 accepted each. With the Astra drafter, edit-capable arms were accepted 4 of 6 times against 3 of 6, and scored 86.0 against 83.8 on average. Edits also used about 12% fewer output tokens.
+- **Drafter:** Astra did better than Sol on every aggregate.
+- **Backend:** FreeCAD was accepted more often than QCAD, but QCAD is also judged on hatching, which FreeCAD omits.
+
+`drafter_choice` therefore stays the default revision mode. With one route per cell these are indications, not rankings. Results, deviations and caveats are in the [experiment guide](docs/public/experiments.md#matrix-backend-drafter-model-and-strategy).
+
+`build_public_site.py --copy-matrix-comparison work\matrix-<id>` publishes a matrix to the site. It copies:
+- the viewer, with relative image paths and public model names;
+- the inputs;
+- the featured edit-capable outputs: render, overlay and native file;
+- an aggregate manifest.
+
+It refuses to publish if local paths remain or if a featured output was not an accepted, reopened edit.
+
 See the [public experiment guide](docs/public/experiments.md) for prerequisites, configuration and scope. Model experiments require authorized inference configuration and can incur charges. Originals and prior revisions are preserved; CAD runs use isolated profiles, progress receipts and deadlines. Automatic mid-route crash recovery remains incomplete.
 
 ## Next Milestone
 
-Improve the evaluator by calibrating it against known defects. Repeat the edit-versus-regeneration comparison with several routes per arm, more drawings and human review. Implement checkpoint recovery. Model requests dominate processing time; CAD execution is a small part of the measured total.
+Improve the evaluator by calibrating it against known defects. Repeat the backend, drafter and strategy matrix with several routes per cell, more drawings and human review. Implement checkpoint recovery. Model requests dominate processing time; CAD execution is a small part of the measured total.
 
 This public release contains code, documentation, supplied drawings authorized for publication, selected input/output examples and aggregate metrics. The separate private-originals folder, configurations and raw run artifacts remain local. Remote CAD hosting remains a roadmap, not a deployed service.

@@ -4,6 +4,8 @@ from pathlib import Path
 import shutil
 import json
 import hashlib
+import re
+import sys
 
 from PIL import Image, ImageChops, ImageDraw, ImageOps
 
@@ -70,7 +72,8 @@ a{color:var(--cp-link);text-underline-offset:4px}a:hover{color:var(--cp-accent)}
 header{border-bottom:1px solid var(--cp-border);background:var(--cp-bg-elevated)}.top{max-width:1180px;margin:auto;padding:20px 28px;display:flex;flex-wrap:wrap;gap:20px;align-items:center;justify-content:space-between}.brand{font-weight:700;color:var(--cp-text);text-decoration:none;font-size:18px}nav{display:flex;flex-wrap:wrap;gap:20px;align-items:center}nav a{text-decoration:none;color:var(--cp-text-muted);font-size:14px}nav a[aria-current]{color:var(--cp-accent);border-bottom:2px solid var(--cp-accent)}select{font:inherit;font-size:13px;padding:6px;background:var(--cp-surface);color:var(--cp-text);border:1px solid var(--cp-border)}
 main{max-width:1180px;margin:auto;padding:42px 28px 70px}.eyebrow{font-size:12px;font-weight:700;text-transform:uppercase;color:var(--cp-accent)}h1{font-size:40px;line-height:1.15;margin:12px 0 18px;max-width:950px;overflow-wrap:anywhere}h2{font-size:25px;line-height:1.25;margin:0 0 16px}h3{font-size:18px;margin:0 0 8px}p{margin:0 0 16px;max-width:78ch}.lead{font-size:19px;color:var(--cp-text-muted);max-width:75ch}.intro{padding-bottom:28px}.band{padding:36px 0;border-top:1px solid var(--cp-border)}.two{display:grid;grid-template-columns:1fr 1fr;gap:32px}.notice{padding:16px 20px;border-left:4px solid var(--cp-accent);background:var(--cp-accent-soft);margin:24px 0;font-size:15px}
 figure{margin:0}figure img{display:block;width:100%;height:300px;object-fit:contain;background:var(--cp-surface-soft);border:1px solid var(--cp-border)}figcaption{color:var(--cp-text-muted);font-size:14px;margin-top:12px}.figure-title{display:block;font-size:16px;font-weight:600;color:var(--cp-text)}.table-scroll{overflow-x:auto;margin:20px 0;border-top:2px solid var(--cp-accent)}table{border-collapse:collapse;width:100%;font-size:14px;min-width:620px}th,td{text-align:left;padding:13px 12px;border-bottom:1px solid var(--cp-border);vertical-align:top}th{background:var(--cp-surface-soft);font-weight:600}td.num{font-variant-numeric:tabular-nums;text-align:right}.muted{color:var(--cp-text-muted);font-size:14px}code,pre{font-family:Consolas,"Courier New",Courier,monospace}pre{background:var(--cp-surface-soft);padding:20px;overflow:auto;border:1px solid var(--cp-border);font-size:13px}.flow{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin:24px 0}.step{padding:18px;border:1px solid var(--cp-border);background:var(--cp-bg-elevated);min-height:145px}.step span{display:block;font-size:12px;color:var(--cp-accent);font-weight:700}.step p{font-size:14px;color:var(--cp-text-muted);margin:6px 0 0}.bars{max-width:800px}.bar-row{display:grid;grid-template-columns:180px 1fr 65px;gap:16px;align-items:center;margin:16px 0;font-size:14px}.track{height:16px;background:var(--cp-surface-soft)}.fill{height:16px;background:var(--cp-accent)}ul{padding-left:22px;max-width:78ch}li{margin:8px 0}footer{border-top:1px solid var(--cp-border);background:var(--cp-bg-elevated);padding:24px 28px;font-size:13px;color:var(--cp-text-muted)}footer div{max-width:1124px;margin:auto;display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between}
-.two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.two>*{min-width:0}.table-scroll{max-width:100%;min-width:0}.comparison img{height:400px}.intro.home{padding-bottom:12px}.home+.band{padding-top:24px}
+.two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.two>*{min-width:0}.table-scroll{max-width:100%;min-width:0}.comparison img{height:400px}.intro.home{padding-bottom:12px}.home+.band{padding-top:24px}.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.three>*{min-width:0}
+@media(max-width:700px){.three{grid-template-columns:1fr;gap:28px}}
 @media(max-width:700px){.top{padding:18px}.brand{font-size:16px}nav{gap:14px}main{padding:30px 18px 50px}h1{font-size:30px}.lead{font-size:17px}.two{grid-template-columns:1fr;gap:28px}.flow{grid-template-columns:1fr 1fr}figure img{height:240px}.bar-row{grid-template-columns:110px 1fr 48px;gap:8px}.band{padding:28px 0}}
 @media(prefers-reduced-motion:no-preference){main{animation:appear .3s ease-out}@keyframes appear{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}}
 @media(max-width:700px){.comparison img{height:280px}}
@@ -128,6 +131,129 @@ def copy_reviewed_drawings():
     (SITE / "assets/drawing-examples.json").write_text(json.dumps(released, indent=2) + "\n", encoding="utf-8")
 
 
+MATRIX_FEATURED = [
+    ("03", "qcad", "astra", "drafter_choice", "Gear housing section, edited in place",
+     "A sectioned right-angle gear assembly: two shafts, ball bearings, gear webs and native QCAD section hatches."),
+    ("06", "freecad", "astra", "drafter_choice", "Motor and screw jack, edited in place",
+     "Front and side views of a geared motor driving a lead screw, rebuilt as FreeCAD sketches without hatching."),
+]
+MATRIX_GROUPS = [("FreeCAD", {"backend": "freecad"}), ("QCAD", {"backend": "qcad"}),
+                 ("Astra drafter", {"model": "astra"}), ("Sol drafter", {"model": "sol"}),
+                 ("Edit-capable", {"kind": "drafter_choice"}), ("From scratch", {"kind": "full_regeneration"}),
+                 ("Astra, edit-capable", {"model": "astra", "kind": "drafter_choice"}), ("Astra, from scratch", {"model": "astra", "kind": "full_regeneration"}),
+                 ("Sol, edit-capable", {"model": "sol", "kind": "drafter_choice"}), ("Sol, from scratch", {"model": "sol", "kind": "full_regeneration"})]
+
+
+def cropped_preview(source, target):
+    output = Image.open(source).convert("RGB")
+    mask = ImageChops.difference(output, Image.new("RGB", output.size, "white")).convert("L").point(lambda value: 255 if value > 50 else 0)
+    box = mask.getbbox()
+    if box is None:
+        raise ValueError("Blank example output: " + str(source))
+    ImageOps.expand(output.crop(box), border=16, fill="white").save(target)
+
+
+def public_text(text):
+    """Replace private inference deployment names with the public model names."""
+    return re.sub(r"\b(?:lab|cad)-gpt-[\w.-]+", lambda match: "Sol" if "sol" in match.group(0) else "Astra", text)
+
+
+def copy_matrix_comparison(matrix):
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import matrix_comparison
+
+    matrix = Path(matrix).resolve()
+    plan, entries = matrix_comparison.collect(matrix)
+    arms = [entry for entry in entries if entry["kind"] != "base"]
+    for entry in arms:
+        entry["metrics"], entry["judgment"] = matrix_comparison.evidence(matrix, entry)
+    viewer = (matrix / "viewer.html").read_text(encoding="utf-8")
+    for drawing in dict.fromkeys(entry["drawing"] for entry in entries):
+        label = drawing + "-freecad"
+        source = matrix / label / "source"
+        if (source / "view.png").read_bytes() != (source / "page.png").read_bytes():
+            raise ValueError("Matrix overlays use a cropped view; publish the view image instead of the page.")
+        shutil.copy2(source / "page.png", SITE / "assets" / ("drawing-" + drawing + "-input.png"))
+        reference = '"image":"' + label + '/source/view.png"'
+        if reference not in viewer:
+            raise ValueError("Viewer image reference not found: " + reference)
+        viewer = viewer.replace(reference, '"image":"assets/drawing-' + drawing + '-input.png"')
+    viewer = public_text(viewer).replace('<h1 id="title">', '<p style="margin:0 0 6px"><a href="experiments.html">&larr; Experiments</a></p><h1 id="title">', 1)
+    if re.search(r"(?<![A-Za-z])[A-Za-z]:[\\/]|source/view\.png|Users[\\/]", viewer):
+        raise ValueError("Public viewer still references local paths.")
+    (SITE / "matrix-viewer.html").write_text(viewer, encoding="utf-8")
+
+    featured = []
+    for drawing, backend, model, kind, title, description in MATRIX_FEATURED:
+        entry = next(item for item in arms if (item["drawing"], item["backend"], item["model"], item["kind"]) == (drawing, backend, model, kind))
+        final, cad = entry["final"], Path(entry["final"]["cad"])
+        geometry = json.loads((cad / "geometry.json").read_text())
+        if final["origin"] != "arm" or not final["accepted"] or geometry["status"] != "passed" or not geometry["reopened"]:
+            raise ValueError("Featured matrix output is not an accepted, reopened arm candidate: " + entry["id"])
+        edits = [item for item in entry["result"]["candidates"] if not item.get("seeded") and item.get("mode") == "edit_existing"]
+        if not edits:
+            raise ValueError("Featured edit-capable output contains no edit: " + entry["id"])
+        stem = "drawing-" + drawing + "-" + backend + "-edit"
+        native = cad / ("draft.dxf" if backend == "qcad" else "draft.FCStd")
+        cropped_preview(cad / "preview.png", SITE / "assets" / (stem + "-output.png"))
+        shutil.copy2(matrix_comparison.overlay_dir(matrix, cad) / "overlay.png", SITE / "assets" / (stem + "-overlay.png"))
+        shutil.copy2(native, SITE / "assets" / (stem + native.suffix))
+        featured.append({"drawing": drawing, "backend": matrix_comparison.BACKENDS[backend]["title"], "drafter": model.capitalize(),
+                         "strategy": "edit-capable (drafter_choice)", "title": title, "description": description,
+                         "input": "drawing-" + drawing + "-input.png", "output": stem + "-output.png", "overlay": stem + "-overlay.png",
+                         "native": stem + native.suffix, "attempt": final["attempt"], "internal_score": final["score"],
+                         "internal_evaluation": "accepted", "drafter_decisions": matrix_comparison.decisions(entry["result"]),
+                         "judge_adherence": entry["judgment"].get("adherence_score"), "judge_coverage": entry["judgment"].get("coverage_score"),
+                         "ink_precision": entry["metrics"].get("ink_precision"), "native_entities": len(geometry["entities"]),
+                         "reopened": True, "human_dimensional_approval": False, "source_campaign": matrix.name})
+    groups = []
+    for name, keys in MATRIX_GROUPS:
+        group = [entry for entry in arms if all(entry[key] == value for key, value in keys.items())]
+        scored = [entry for entry in group if entry["final"]]
+        groups.append({"group": name, "outputs": len(group), "accepted": sum(entry["final"]["accepted"] for entry in scored),
+                       "mean_internal": matrix_comparison.mean([entry["final"]["score"] for entry in scored]),
+                       "judge_adherence": matrix_comparison.mean([entry["judgment"].get("adherence_score") for entry in group]),
+                       "judge_coverage": matrix_comparison.mean([entry["judgment"].get("coverage_score") for entry in group]),
+                       "ink_precision": matrix_comparison.mean([entry["metrics"].get("ink_precision") for entry in group]),
+                       "input_tokens": sum(entry["route_cost"]["input_tokens"] for entry in group),
+                       "output_tokens": sum(entry["route_cost"]["output_tokens"] for entry in group),
+                       "seconds": round(sum(entry["route_cost"]["elapsed_seconds"] for entry in group))})
+    manifest = {"campaign": matrix.name, "code": plan["code"], "outputs": len(arms), "featured": featured, "groups": groups,
+                "selection_basis": "Edit-capable outputs that made at least one native edit and passed the internal evaluation; the user prefers the edit-capable strategy.",
+                "publication_authorization": "User authorized publishing the matrix experiment, its inputs and outputs on October 18, 2026."}
+    (SITE / "assets/matrix-comparison.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+
+def matrix_examples(manifest):
+    content = ""
+    for case in manifest["featured"]:
+        name = "assets/" + case["output"]
+        revision = hashlib.sha256((SITE / "assets" / case["native"]).read_bytes()).hexdigest()[:12]
+        kind = "DXF" if case["native"].endswith(".dxf") else "FreeCAD document"
+        steps = "; ".join(case["drafter_decisions"]).replace("edit_existing", "edit").replace("base ", "candidate ")
+        content += ('<section class="band"><h2>' + escape(case["title"]) + '</h2><p>' + escape(case["description"]) + ' ' + case["backend"] + ' / ' + case["drafter"]
+                    + ', edit-capable strategy. Drafter decisions: ' + escape(steps) + '.</p><div class="three comparison">'
+                    + '<figure><a href="assets/' + case["input"] + '"><img src="assets/' + case["input"] + '" alt="Original scan of drawing ' + case["drawing"] + '"></a><figcaption><span class="figure-title">Input: original scan</span></figcaption></figure>'
+                    + '<figure><a href="' + name + '?v=' + revision + '"><img src="' + name + '?v=' + revision + '" alt="Native ' + case["backend"] + ' reconstruction of drawing ' + case["drawing"] + '"></a><figcaption><span class="figure-title">Output: editable CAD</span>Rendered from the saved, reopened file.</figcaption></figure>'
+                    + '<figure><a href="assets/' + case["overlay"] + '?v=' + revision + '"><img src="assets/' + case["overlay"] + '?v=' + revision + '" alt="Reconstruction drawn over the original scan of drawing ' + case["drawing"] + '"></a><figcaption><span class="figure-title">Overlay on the scan</span>Internal score ' + str(case["internal_score"])
+                    + ', judge adherence ' + str(case["judge_adherence"]) + '/' + str(case["judge_coverage"]) + ' coverage, ink precision ' + format(case["ink_precision"], ".0%") + '.</figcaption></figure></div>'
+                    + '<p style="margin-top:16px"><a href="assets/' + case["native"] + '?v=' + revision + '" download>Download ' + kind + '</a> &nbsp; <a href="matrix-viewer.html">Compare all versions in the overlay viewer</a></p></section>')
+    return content
+
+
+def matrix_band(manifest):
+    rows = "".join("<tr><td>" + escape(item["group"]) + "</td><td class=num>" + str(item["accepted"]) + " / " + str(item["outputs"]) + "</td><td class=num>" + format(item["mean_internal"], ".1f")
+                   + "</td><td class=num>" + format(item["judge_adherence"], ".1f") + " / " + format(item["judge_coverage"], ".1f") + "</td><td class=num>" + format(item["ink_precision"], ".1%")
+                   + "</td><td class=num>" + format(item["input_tokens"], ",") + " / " + format(item["output_tokens"], ",") + "</td></tr>" for item in manifest["groups"])
+    return ('<section class="band"><h2>Matrix: backend, drafter model and strategy</h2><p>Three drawings (06, 03, 10) were rebuilt by FreeCAD and QCAD, with Astra and Sol as drafter, each with the edit-capable strategy and with regeneration from scratch: '
+            + str(manifest["outputs"]) + ' final outputs. Each drawing, backend and drafter combination began with one shared attempt; each strategy then added two attempts. The evaluator, the blind overlay judge, reasoning effort and limits were the same everywhere. FreeCAD has no hatch entity, so it was told to omit hatching and was not penalized for it.</p>'
+            + '<div class="table-scroll"><table><thead><tr><th>Group</th><th>Internally accepted</th><th>Mean internal score</th><th>Judge adherence / coverage</th><th>Ink precision</th><th>Input / output tokens</th></tr></thead><tbody>'
+            + rows + '</tbody></table></div><ul><li><strong>Strategy:</strong> overall a tie, 5/12 each. With the stronger Astra drafter the edit-capable arms were accepted slightly more often and scored higher, and editing used about 12% fewer output tokens. It remains the default revision mode.</li>'
+            + '<li><strong>Drafter:</strong> Astra did better than Sol on every aggregate and was faster.</li><li><strong>Backend:</strong> FreeCAD was accepted more often than QCAD, but QCAD was also judged on hatching, which FreeCAD omits, so the comparison is not like-for-like.</li></ul>'
+            + '<p><a href="matrix-viewer.html">Open the full-page overlay viewer</a>: toggle the original and every version per drawing, filter by backend, drafter or strategy.</p>'
+            + '<p class="muted">One route per cell; differences of a few points are within judge and route variation. The judge and drafters share a provider. The client switched to streamed responses mid-run after network drops, and two FreeCAD bases lost their first attempt to an MCP connection timeout. No output has human approval; the overlay is not metrology.</p></section>')
+
+
 def drawing_pair(drawing, title, description):
     name = "assets/drawing-" + drawing
     revision = hashlib.sha256((SITE / (name + "-output.dxf")).read_bytes()).hexdigest()[:12]
@@ -136,11 +262,15 @@ def drawing_pair(drawing, title, description):
     return '<section class="band"><h2>' + escape(title) + '</h2><p>' + escape(description) + '</p><div class="two comparison"><figure><a href="' + name + '-input.png"><img src="' + name + '-input.png" alt="Original degraded scan for drawing ' + drawing + '"></a><figcaption><span class="figure-title">Input: original scan</span></figcaption></figure><figure><a href="' + output + '"><img src="' + output + '" alt="Actual native QCAD reconstruction of drawing ' + drawing + '"></a><figcaption><span class="figure-title">Output: editable CAD</span>Generated geometry, rendered from the saved DXF.</figcaption></figure></div><p style="margin-top:16px"><a href="' + download + '" download>Download DXF</a></p></section>'
 
 
-def build(copy_assets=False, reviewed_drawings=False):
+def build(copy_assets=False, reviewed_drawings=False, matrix=None):
     SITE.mkdir(exist_ok=True)
     (SITE / "assets").mkdir(exist_ok=True)
     if reviewed_drawings:
         copy_reviewed_drawings()
+    if matrix:
+        copy_matrix_comparison(matrix)
+    matrix_manifest = SITE / "assets/matrix-comparison.json"
+    matrix_manifest = json.loads(matrix_manifest.read_text()) if matrix_manifest.exists() and (SITE / "matrix-viewer.html").exists() else None
     if copy_assets:
         sources = {"freecad-synthetic.png": ROOT / "work/20261010T085534Z-94fa927a/revised.png",
                "freecad-input.png": ROOT / "work/20261010T085534Z-94fa927a/initial.png",
@@ -220,7 +350,7 @@ def build(copy_assets=False, reviewed_drawings=False):
 <section class="band"><h2>A correction in drawing 05</h2><p>The assembly example took four candidates in the QCAD/Astra campaign. The first evaluation found that adjacent components used the same hatch direction and that the spacing was too coarse. Those defects were fed back with the previous model. Later checks identified missing interface details and a wrongly opened passage in the upper boss. Candidate four restored the terminating boundary and passed the internal evaluation.</p><p>This is why both kinds of checks are needed: the earlier DXFs already contained valid native hatches, but their material interpretation and mechanical details still needed correction.</p><p><a href="examples.html">View the final drawing and download its DXF</a></p></section>
 <section class="band"><h2>When does the loop stop?</h2><p>The automatic evaluator must return acceptance and a score of at least 85/100. Otherwise the runner uses another candidate, up to four total, including the first. A deadline or unrecoverable request error can end the route earlier. Limits are enforced by the runner, not left to the model.</p><p>An accepted result is ready for technical review, not for manufacture. The operator checks ambiguous features and confirms physical dimensions. The site can show a visually selected draft even when the automatic evaluator rejected it; the recorded result remains unchanged.</p></section>
 <section class="band"><h2>What is complete today?</h2><div class="table-scroll"><table><thead><tr><th>Part</th><th>Current implementation</th><th>Still needed</th></tr></thead><tbody>
-<tr><td>Local reconstruction loop</td><td>Source preparation, analysis, JSON generation, native construction, rendering, evaluation and bounded retries have run end to end.</td><td>Better evaluation calibration. Retries can edit individual components of a saved candidate or regenerate. A first matched test on three drawings found no consistent quality difference between the two modes.</td></tr>
+<tr><td>Local reconstruction loop</td><td>Source preparation, analysis, JSON generation, native construction, rendering, evaluation and bounded retries have run end to end.</td><td>Better evaluation calibration. Retries can edit individual components of a saved candidate or regenerate. Matched tests on three drawings, two backends and two drafters found only small differences; editing remains the default because it preserved verified components and used fewer output tokens.</td></tr>
 <tr><td>Failure handling</td><td>Separate run directories, progressive checkpoints, 120-second progress reports, deadlines and cleanup of owned processes.</td><td>Automatic continuation from an interrupted mid-route checkpoint. Saving a checkpoint is not the same as being able to resume it.</td></tr>
 <tr><td>Engineering handoff</td><td>Native 2D geometry, preview and reports are retained for manual inspection. Dimension text, labels and title blocks are not reconstructed.</td><td>Confirmed physical dimensions, drawing annotations and a formal approval workflow. Current coordinates describe the scan, not certified part measurements.</td></tr>
 <tr><td>Remote service</td><td>No hosted CAD worker or public upload/conversion application. The website documents local experiments.</td><td>Job submission, storage, queue, worker ownership, durable recovery and delivery controls before unattended hosting.</td></tr></tbody></table></div><p>The local loop is implemented; a production conversion service is not. FreeCAD and QCAD remain experimental alternatives, and neither has been selected as the final backend.</p></section>''')
@@ -228,18 +358,21 @@ def build(copy_assets=False, reviewed_drawings=False):
 <section class="band"><h2>Independent interpretations: three views, four methods</h2><p>Twelve routes began from original rasters with no intermediate geometry or evaluator feedback shared between methods. All saved native files passed persistence checks. One Robust candidate was corrected and reevaluated. Internal scores were too generous on some mechanically wrong nut contours.</p><div class="table-scroll"><table><thead><tr><th>Method</th><th>Calls</th><th>Total seconds</th><th>Input tokens</th><th>Cached input</th><th>Output tokens</th></tr></thead><tbody><tr><td>QCAD</td><td>9</td><td>1,069.59</td><td>21,834</td><td>0</td><td>46,695</td></tr><tr><td>FreeCAD direct</td><td>9</td><td>1,181.51</td><td>22,213</td><td>9,636</td><td>48,119</td></tr><tr><td>FreeCAD Neka</td><td>9</td><td>1,168.56</td><td>22,271</td><td>9,636</td><td>45,385</td></tr><tr><td>FreeCAD Robust</td><td>11</td><td>1,326.41</td><td>32,004</td><td>9,636</td><td>52,658</td></tr></tbody></table></div><p class="muted">Cached input is included in input; reasoning is included in output. Fixed order and cache effects confound rankings. Provider usage is not an invoice; dollar costs were not verified.</p></section>
 <section class="band two"><div><h2>Neka and Robust MCP</h2><p>Both passed 3/3 trials on the same 140-entity model. Median time including startup, rendering and cleanup: <strong>Neka 23.33 s</strong>, <strong>Robust 30.39 s</strong>.</p><p class="muted">This compares execution, not model interpretation. Six trials are too few to establish reliability.</p></div><div><h2>Full-sheet reconstruction</h2><div class="table-scroll"><table><thead><tr><th>Campaign</th><th>Astra accepted</th><th>Sol accepted</th></tr></thead><tbody><tr><td>FreeCAD Neka</td><td>4/10</td><td>5/10</td></tr><tr><td>Native QCAD</td><td>4/10</td><td>3/10</td></tr></tbody></table></div><p class="muted">Accepted by the common Astra evaluator, not by a human reviewer. Campaign conditions differed, so these are not backend accuracy rankings.</p></div></section>
 <section class="band"><h2>Where the QCAD campaign spent its time</h2><p>Twenty whole-sheet routes took 9 h 43 m 34 s wall time. CAD accounted for about 6 m 31 s; the model/correction workflow was the bottleneck.</p><div class="bars" aria-label="Recorded durations by phase"><div class="bar-row"><span>Analysis / 20 calls</span><div class="track"><div class="fill" style="width:18.3%"></div></div><span>63 min</span></div><div class="bar-row"><span>Generation / 75 calls</span><div class="track"><div class="fill" style="width:100%"></div></div><span>346 min</span></div><div class="bar-row"><span>Evaluation / 64 calls</span><div class="track"><div class="fill" style="width:48.2%"></div></div><span>167 min</span></div><div class="bar-row"><span>Successful CAD builds</span><div class="track"><div class="fill" style="width:1.9%"></div></div><span>6.5 min</span></div></div><div class="notice">Client-observed request duration includes network, service, reasoning and possible suspension. Roughly 29 minutes of Modern Standby events overlapped the run; do not add them again or interpret all waiting as cloud compute time.</div></section>
-<section class="band"><h2>Next tests</h2><ul><li>Check the evaluator against known defects.</li><li>Repeat the comparison of component edits and full regeneration with several routes per drawing.</li><li>Compare reasoning settings with the PC kept awake.</li><li>Test checkpoint recovery before remote hosting.</li></ul><p><a href="''' + REPOSITORY + '''/blob/main/docs/public/experiments.md">Test details and prerequisites</a></p><p class="muted">Original drawings, derived images and raw responses remain private.</p></section>''')
+''' + (matrix_band(matrix_manifest) if matrix_manifest else "") + '''
+<section class="band"><h2>Next tests</h2><ul><li>Check the evaluator against known defects.</li><li>Repeat the backend, drafter and strategy matrix with several routes per cell and human review.</li><li>Compare reasoning settings with the PC kept awake.</li><li>Test checkpoint recovery before remote hosting.</li></ul><p><a href="''' + REPOSITORY + '''/blob/main/docs/public/experiments.md">Test details and prerequisites</a></p><p class="muted">Original drawings, derived images and raw responses remain private.</p></section>''')
     example_manifest = SITE / "assets/drawing-examples.json"
     if example_manifest.exists():
         cases = json.loads(example_manifest.read_text())
         page("index.html", "Overview", '''<section class="intro home"><div class="eyebrow">Scanned drawing to CAD</div><h1>Convert old engineering drawings into editable CAD</h1><p class="lead">The system reads a PDF or image and rebuilds its components in FreeCAD or QCAD. It checks the saved geometry, compares the output with the scan, and refines the drawing for review.</p></section>'''
              + drawing_pair("05", "A degraded assembly drawing, rebuilt in CAD", "Three views of an assembly, including a longitudinal section, internal passages, handle and union fittings. Cut material is represented by native hatches.")
-             + '''<section class="band"><h2>How the conversion works</h2><ol><li>The model identifies views, components and drawing conventions.</li><li>Local CAD scripts construct editable objects from validated data.</li><li>The file is saved, reopened and checked. An evaluator reviews the rendering and requests corrections when needed.</li></ol><p>The example above was built with QCAD and Astra. Its saved DXF passed native geometry and hatch checks. Dimensions that cannot be read reliably remain unconfirmed.</p><p><a href="examples.html">More reconstructed drawings</a> &nbsp; <a href="architecture.html">Architecture</a></p></section>
-<section class="band two"><div><h2>Two CAD backends</h2><p>QCAD provides 2D blocks, layers, polylines and hatches. FreeCAD provides sketches and constraints, with a potential future 3D extension. Both remain in development.</p></div><div><h2>Use and adaptation</h2><p>Code and documentation are MIT-licensed. The same pipeline could be adapted to rough sketches by changing interpretation instructions and testing the required geometry.</p><p><a href="experiments.html">Measurements and test scope</a></p></div></section>''')
-        content = '''<section class="intro"><div class="eyebrow">Reconstruction examples</div><h1>Input and output</h1><p class="lead">Three scanned drawings rebuilt as editable CAD with Astra and QCAD.</p><p>Each comparison shows the source and latest saved Astra version. Download the DXF to inspect its objects, layers and hatches. Physical dimensions still require confirmation.</p></section>'''
+             + '''<section class="band"><h2>How the conversion works</h2><ol><li>The model identifies views, components and drawing conventions.</li><li>Local CAD scripts construct editable objects from validated data.</li><li>The file is saved, reopened and checked. An evaluator reviews the rendering and requests corrections when needed.</li></ol>             <p>The example above was built with QCAD and Astra. Its saved DXF passed native geometry and hatch checks. Dimensions that cannot be read reliably remain unconfirmed.</p><p><a href="examples.html">More reconstructed drawings</a> &nbsp; <a href="architecture.html">Architecture</a></p></section>'''
+                          + ('''<section class="band"><h2>Edit a draft instead of starting over</h2><p>After each evaluation the drafter can edit components of a saved candidate, keeping verified components unchanged, or regenerate the whole drawing. A matrix of 24 reconstructions compares both strategies with FreeCAD and QCAD and with two drafter models.</p><p><a href="matrix-viewer.html">Open the overlay viewer</a> &nbsp; <a href="experiments.html">Matrix results</a></p></section>''' if matrix_manifest else "")
+                          + '''
+             <section class="band two"><div><h2>Two CAD backends</h2><p>QCAD provides 2D blocks, layers, polylines and hatches. FreeCAD provides sketches and constraints, with a potential future 3D extension. Both remain in development.</p></div><div><h2>Use and adaptation</h2><p>Code and documentation are MIT-licensed. The same pipeline could be adapted to rough sketches by changing interpretation instructions and testing the required geometry.</p><p><a href="experiments.html">Measurements and test scope</a></p></div></section>''')
+        content = '''<section class="intro"><div class="eyebrow">Reconstruction examples</div><h1>Input and output</h1><p class="lead">Scanned drawings rebuilt as editable CAD with Astra.</p><p>''' + ('''The first two come from the matrix experiment, where the drafter edited its own saved candidate; the overlay shows the result over the scan. The others show the latest saved QCAD version. ''' if matrix_manifest else '''Each comparison shows the source and latest saved Astra version. ''') + '''Download the native file to inspect its objects and layers. Physical dimensions still require confirmation.</p></section>''' + (matrix_examples(matrix_manifest) if matrix_manifest else "")
         for case in cases:
             content += drawing_pair(case["drawing"], case["title"], case["description"] + " QCAD / " + ("Astra" if case["generator"] == "astra" else "GPT-6.1 Sol") + ".")
-        content += '''<section class="band"><h2>What is included</h2><p>Downloads contain native DXF entities, not embedded scans. The ten supplied PDF and TIFF inputs are available in the <a href="''' + REPOSITORY + '''/tree/main/drawings">drawings folder</a>.</p><p>Selected inputs and outputs were cleared for publication by the user. This permission does not change ownership of the original drawings or license them under MIT.</p><p><a href="architecture.html">How the system is built</a> &nbsp; <a href="experiments.html">Test measurements</a></p></section>'''
+        content += '''<section class="band"><h2>What is included</h2><p>Downloads contain native DXF or FreeCAD entities, not embedded scans. The ten supplied PDF and TIFF inputs are available in the <a href="''' + REPOSITORY + '''/tree/main/drawings">drawings folder</a>.</p><p>Selected inputs and outputs were cleared for publication by the user. This permission does not change ownership of the original drawings or license them under MIT.</p><p><a href="architecture.html">How the system is built</a> &nbsp; <a href="experiments.html">Test measurements</a></p></section>'''
         page("examples.html", "Examples", content)
         for name in ("architecture.html", "experiments.html"):
             path = SITE / name
@@ -254,5 +387,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build the static public-safe documentation site.")
     parser.add_argument("--copy-local-synthetic-assets", action="store_true")
     parser.add_argument("--copy-authorized-drawing-examples", action="store_true")
+    parser.add_argument("--copy-matrix-comparison", metavar="DIRECTORY", help="Local matrix_comparison.py output directory to publish.")
     args = parser.parse_args()
-    build(args.copy_local_synthetic_assets, args.copy_authorized_drawing_examples)
+    build(args.copy_local_synthetic_assets, args.copy_authorized_drawing_examples, args.copy_matrix_comparison)

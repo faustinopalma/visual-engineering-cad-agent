@@ -86,11 +86,15 @@ One route per arm and drawing cannot rank the modes. The judge belongs to the sa
 Tokens and seconds are route totals for drafter and evaluator, including the shared base for each arm. The overlay judge used 32 further successful calls (66,060 input / 105,273 output tokens). Dollar costs were not verified.
 
 **What the matrix shows:**
-- **Strategy.** Edit-capable and from-scratch arms tied: 5 of 12 accepted each, with mean scores within 0.3 points. The edit-capable arms used about 10% more input tokens and 12% fewer output tokens.
+- **Strategy.** Edit-capable and from-scratch arms tied: 5 of 12 accepted each, with mean scores within 0.3 points. The edit-capable arms used about 10% more input tokens and 12% fewer output tokens. With the Astra drafter, edit-capable arms were accepted 4 of 6 times against 3 of 6, with a mean internal score of 86.0 against 83.8. With Sol the direction reversed: 1 of 6 against 2 of 6, and 80.0 against 82.3.
 - **Drafter model.** Astra did better than Sol on every aggregate: acceptance, internal score and ink precision. Sol was also slower, by about 24%.
 - **Backend.** FreeCAD was accepted more often than QCAD and scored higher internally. This is not a like-for-like comparison, though: QCAD outputs were also judged on hatching, which FreeCAD skips.
 
-The full report holds a per-drawing FreeCAD versus QCAD table, every route, and a full-page viewer. The viewer lets you overlay the source and all 12 layers per drawing (4 bases plus 8 arms), toggle each one, and filter by backend, model or strategy.
+**Decision.** Edit-capable (`drafter_choice`) remains the default revision mode. It is cheaper in output tokens, slightly better with the stronger drafter, and keeps verified components. It has not been shown to be better in general. The two featured results on the [examples page](https://faustinopalma.github.io/visual-engineering-cad-agent/examples.html) were both finished by drafter edits:
+- drawing 03 on QCAD with Astra, attempt 3, internal 91;
+- drawing 06 on FreeCAD with Astra, attempt 2, internal 88.
+
+The full report holds a per-drawing FreeCAD versus QCAD table, every route, and a full-page viewer. The viewer lets you overlay the source and all 12 layers per drawing (4 bases plus 8 arms), toggle each one, and filter by backend, model or strategy. The [published viewer](https://faustinopalma.github.io/visual-engineering-cad-agent/matrix-viewer.html) shows the same layers. In it, deployment names are replaced by the public model names, and images load from the site assets.
 
 **Disclosed deviations.**
 - *Transport switch mid-run.* After 15 of 36 routes, about one in three non-streaming model requests was dropped at around 300 s or timed out at 900 s. The client was switched to streamed responses with TCP keepalive. Prompts, models and limits were unchanged.

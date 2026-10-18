@@ -1,0 +1,186 @@
+{
+  "campaign": "matrix-comparison-20261017",
+  "code": {
+    "commit": "2d94ceacecebfd5931ebcdbdcac0fa6d84d84afc",
+    "branch": "hydrafusion-incremental-cad-edits",
+    "dirty": false
+  },
+  "outputs": 24,
+  "featured": [
+    {
+      "drawing": "03",
+      "backend": "QCAD",
+      "drafter": "Astra",
+      "strategy": "edit-capable (drafter_choice)",
+      "title": "Gear housing section, edited in place",
+      "description": "A sectioned right-angle gear assembly: two shafts, ball bearings, gear webs and native QCAD section hatches.",
+      "input": "drawing-03-input.png",
+      "output": "drawing-03-qcad-edit-output.png",
+      "overlay": "drawing-03-qcad-edit-overlay.png",
+      "native": "drawing-03-qcad-edit.dxf",
+      "attempt": 3,
+      "internal_score": 91,
+      "internal_evaluation": "accepted",
+      "drafter_decisions": [
+        "edit_existing (base 1; replaced 7, preserved 10)",
+        "edit_existing (base 2; replaced 6, added 1, preserved 11)"
+      ],
+      "judge_adherence": 87,
+      "judge_coverage": 91,
+      "ink_precision": 0.7806962608215141,
+      "native_entities": 174,
+      "reopened": true,
+      "human_dimensional_approval": false,
+      "source_campaign": "matrix-comparison-20261017"
+    },
+    {
+      "drawing": "06",
+      "backend": "FreeCAD",
+      "drafter": "Astra",
+      "strategy": "edit-capable (drafter_choice)",
+      "title": "Motor and screw jack, edited in place",
+      "description": "Front and side views of a geared motor driving a lead screw, rebuilt as FreeCAD sketches without hatching.",
+      "input": "drawing-06-input.png",
+      "output": "drawing-06-freecad-edit-output.png",
+      "overlay": "drawing-06-freecad-edit-overlay.png",
+      "native": "drawing-06-freecad-edit.FCStd",
+      "attempt": 2,
+      "internal_score": 88,
+      "internal_evaluation": "accepted",
+      "drafter_decisions": [
+        "edit_existing (base 1; replaced 6, preserved 14)"
+      ],
+      "judge_adherence": 90,
+      "judge_coverage": 89,
+      "ink_precision": 0.8194762548635448,
+      "native_entities": 409,
+      "reopened": true,
+      "human_dimensional_approval": false,
+      "source_campaign": "matrix-comparison-20261017"
+    }
+  ],
+  "groups": [
+    {
+      "group": "FreeCAD",
+      "outputs": 12,
+      "accepted": 7,
+      "mean_internal": 84.66666666666667,
+      "judge_adherence": 88.41666666666667,
+      "judge_coverage": 88.83333333333333,
+      "ink_precision": 0.7709697161078513,
+      "input_tokens": 376379,
+      "output_tokens": 614602,
+      "seconds": 18379
+    },
+    {
+      "group": "QCAD",
+      "outputs": 12,
+      "accepted": 3,
+      "mean_internal": 81.41666666666667,
+      "judge_adherence": 87.41666666666667,
+      "judge_coverage": 86.08333333333333,
+      "ink_precision": 0.7485100850082683,
+      "input_tokens": 569949,
+      "output_tokens": 862726,
+      "seconds": 20540
+    },
+    {
+      "group": "Astra drafter",
+      "outputs": 12,
+      "accepted": 7,
+      "mean_internal": 84.91666666666667,
+      "judge_adherence": 88.5,
+      "judge_coverage": 87.66666666666667,
+      "ink_precision": 0.7840978308926716,
+      "input_tokens": 434389,
+      "output_tokens": 729641,
+      "seconds": 17366
+    },
+    {
+      "group": "Sol drafter",
+      "outputs": 12,
+      "accepted": 3,
+      "mean_internal": 81.16666666666667,
+      "judge_adherence": 87.33333333333333,
+      "judge_coverage": 87.25,
+      "ink_precision": 0.7353819702234478,
+      "input_tokens": 511939,
+      "output_tokens": 747687,
+      "seconds": 21553
+    },
+    {
+      "group": "Edit-capable",
+      "outputs": 12,
+      "accepted": 5,
+      "mean_internal": 83.0,
+      "judge_adherence": 88.0,
+      "judge_coverage": 87.58333333333333,
+      "ink_precision": 0.760977315981355,
+      "input_tokens": 496951,
+      "output_tokens": 692872,
+      "seconds": 19101
+    },
+    {
+      "group": "From scratch",
+      "outputs": 12,
+      "accepted": 5,
+      "mean_internal": 83.08333333333333,
+      "judge_adherence": 87.83333333333333,
+      "judge_coverage": 87.33333333333333,
+      "ink_precision": 0.7585024851347644,
+      "input_tokens": 449377,
+      "output_tokens": 784456,
+      "seconds": 19818
+    },
+    {
+      "group": "Astra, edit-capable",
+      "outputs": 6,
+      "accepted": 4,
+      "mean_internal": 86.0,
+      "judge_adherence": 88.66666666666667,
+      "judge_coverage": 88.5,
+      "ink_precision": 0.7868944867349277,
+      "input_tokens": 219923,
+      "output_tokens": 329149,
+      "seconds": 8074
+    },
+    {
+      "group": "Astra, from scratch",
+      "outputs": 6,
+      "accepted": 3,
+      "mean_internal": 83.83333333333333,
+      "judge_adherence": 88.33333333333333,
+      "judge_coverage": 86.83333333333333,
+      "ink_precision": 0.7813011750504155,
+      "input_tokens": 214466,
+      "output_tokens": 400492,
+      "seconds": 9292
+    },
+    {
+      "group": "Sol, edit-capable",
+      "outputs": 6,
+      "accepted": 1,
+      "mean_internal": 80.0,
+      "judge_adherence": 87.33333333333333,
+      "judge_coverage": 86.66666666666667,
+      "ink_precision": 0.7350601452277824,
+      "input_tokens": 277028,
+      "output_tokens": 363723,
+      "seconds": 11027
+    },
+    {
+      "group": "Sol, from scratch",
+      "outputs": 6,
+      "accepted": 2,
+      "mean_internal": 82.33333333333333,
+      "judge_adherence": 87.33333333333333,
+      "judge_coverage": 87.83333333333333,
+      "ink_precision": 0.7357037952191132,
+      "input_tokens": 234911,
+      "output_tokens": 383964,
+      "seconds": 10526
+    }
+  ],
+  "selection_basis": "Edit-capable outputs that made at least one native edit and passed the internal evaluation; the user prefers the edit-capable strategy.",
+  "publication_authorization": "User authorized publishing the matrix experiment, its inputs and outputs on October 18, 2026."
+}
